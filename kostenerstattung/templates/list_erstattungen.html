@@ -1,0 +1,61 @@
+{% from 'bootstrap5/table.html' import render_table %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Kostenerstattungen anzeigen</h2>
+
+<a href="{{ url_for("reload_config") }}">Konfiguration neu einlesen</a> </br></br>
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+<h3>Neue Erstattungen</h3>
+{{ render_table(data_neu, titles, show_actions=True,
+    view_url=('show_erstattung', [('erstattung_id', ':id')]),
+    edit_url=('edit_erstattung', [('erstattung_id', ':id')]),
+    custom_actions=[
+    (
+        'bezahlen',
+        'currency-euro',
+        ('pay_erstattung', [('erstattung_id', ':id')])
+    ),
+    (
+        'löschen',
+        'trash-fill',
+        ('delete_erstattung', [('erstattung_id', ':id')])
+    ),
+    ])
+}}
+
+<h3>Bezahlte Erstattungen</h3>
+{{ render_table(data_bezahlt, titles, show_actions=True,
+    view_url=('show_erstattung', [('erstattung_id', ':id')]),
+    custom_actions=[
+    (
+        'verbuchen',
+        'book',
+        ('book_erstattung', [('erstattung_id', ':id')])
+    ),
+    (
+        'löschen',
+        'trash-fill',
+        ('delete_erstattung', [('erstattung_id', ':id')])
+    ),
+    ])
+}}
+
+<h3>Hier im System verbucht</h3>
+{{ render_table(data_verbucht, titles, show_actions=True,
+    view_url=('show_erstattung', [('erstattung_id', ':id')]),
+    custom_actions=[
+    (
+        'löschen',
+        'trash-fill',
+        ('delete_erstattung', [('erstattung_id', ':id')])
+    ),
+    ])
+}}
+
+
+{{ hi }}
+
+{% endblock %}

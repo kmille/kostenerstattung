@@ -1,0 +1,12 @@
+{% from "macros.html" import show_erstattung, header_erstattungen %}
+{% from 'bootstrap5/form.html' import render_form, render_field, render_form_row %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Einreichung löschen</h2>
+
+{{ header_erstattungen(erstattung) }}
+{{ show_erstattung(config, erstattung, []) }}
+{{ render_form(form, button_style="danger") }}
+
+{% endblock %}

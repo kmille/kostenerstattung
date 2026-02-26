@@ -1,0 +1,10 @@
+data
+*config*.yml
+TODOS.txt
+*.db
+bootstrap-flask
+belege
+release.sh
+*.log
+bootstrap-flask
+__pycache__

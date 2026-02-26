@@ -1,0 +1,18 @@
+{% from 'bootstrap5/form.html' import render_form %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Webling konfiguration neu laden</h2>
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+{{ render_form(form) }}
+
+Kobu Version: {{ version }} </br></br>
+
+# TODO: alles komplett anzeigen </br>
+{% for buchungsperiode in config["webling_api"].buchungsperioden %}
+    - {{ buchungsperiode }} </br>
+{% endfor %}
+
+{% endblock %}

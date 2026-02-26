@@ -1,0 +1,59 @@
+{% from 'bootstrap5/nav.html' import render_nav_item %}
+{% from 'bootstrap5/utils.html' import render_messages %}
+{% from 'bootstrap5/nav.html' import render_nav_item, render_breadcrumb_item %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Kostenerstattung & Buchhaltung</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    {{ bootstrap.load_css() }}
+    {{ bootstrap.load_icon_font_css() }}
+    <style>
+        h2 {
+            margin-top: 20px;
+        }
+        footer {
+            margin-top: 200px;
+            margin-bottom: 20px;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+
+        <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <div class="navbar-nav mr-auto">
+                {{ render_nav_item('index', 'Erstattungsformular') }}
+                {{ render_nav_item('list_erstattungen', 'Buchhaltung') }}
+            </div>
+        </div>
+        </nav>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {{ bootstrap.load_js() }}
+
+    <footer class="text-center">
+    {% block footer %}
+        <small>
+            Kostenerstattung &#38; Buchhaltung - &copy; <script>document.write(new Date().getFullYear())</script> <a href="https://github.com/kmille/kostenerstattung">kmille</a>
+        </small>
+    {% endblock %}
+    </footer>
+
+
+</body>
+</html>
+

@@ -1,0 +1,23 @@
+{% from 'bootstrap5/form.html' import render_form %}
+{% from "macros.html" import show_erstattung, header_erstattungen %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Kostenerstattung bezahlen</h2>
+
+{{ header_erstattungen(erstattung) }}
+{{ show_erstattung(config, erstattung, belege) }}
+
+{% if qrcode %}
+    <div id="qrcode">
+        Diesen QR-Code kannst du in deiner Banking App scannen:</br>
+        <img class="img-fluid" src="data:image/png;base64,{{qrcode}}"/>
+        </br>
+    </div>
+{% else %}
+    {{ render_form(form, action="#qrcode") }}
+{% endif %}
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+{% endblock %}

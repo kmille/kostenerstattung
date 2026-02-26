@@ -1,0 +1,12 @@
+{% from 'bootstrap5/form.html' import render_form %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Login Buchhaltung</h2>
+
+{{ render_form(form) }}
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+{% endblock %}
+

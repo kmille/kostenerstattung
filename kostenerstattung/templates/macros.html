@@ -1,0 +1,59 @@
+{% macro show_erstattung(config, erstattung, belege = []) %}
+    Eingereicht am {{ erstattung.created_at.strftime("%d.%m.%Y (%a) %H:%M") }} </br>
+    Status: {{ erstattung.state.value }} </br>
+    Eingereicht von {{ erstattung.name }} ({{ erstattung.email }})</br>
+    Bank: {{ erstattung.name_bank_account }} ({{ erstattung.iban }})</br>
+    Betrag:: {{ erstattung.betrag | string | replace('.', ',') }} Euro</br>
+    Beschreibung:</br>{{ erstattung.description.replace("\n", "</br>") | safe}}</br>
+    Belege: 
+    {% for beleg in belege %}
+        <a href="/erstattung/{{erstattung.id}}/belege/{{beleg.name}}">{{ beleg.name }}</a> | 
+    {% endfor %}
+    </br>
+    Ticket: <a href="{{ config['zammad']['api_base_url'] }}/#ticket/zoom/{{ erstattung.ticket_id}}">#{{ erstattung.ticket_number}}</a></br>
+
+    {% if erstattung.verwendungszweck %}
+        <hr>
+        Bezahlt am {{ erstattung.paid_at.strftime("%d.%m.%Y (%a) %H:%M") }} </br>
+        Verwendungszweck: {{ erstattung.verwendungszweck }}
+    {% endif %}
+
+    {% if erstattung.booked_at %}
+        <hr>
+        Verbucht am {{ erstattung.booked_at.strftime("%d.%m.%Y (%a) %H:%M") }} </br>
+        {% if erstattung.buchungs_id %}
+            Webling Buchungs ID: <a href="{{ config["webling"]["base_url"] }}/admin#/accounting/{{ erstattung.buchungsperiode_id }}/entrygroup//:entrygroup/editor/{{ erstattung.entrygroup_id}}">{{ erstattung.buchungs_id }}</a>
+            </br>
+        {% endif %}
+
+        {% for kostenstelle in  config["webling_api"].data[erstattung.buchungsperiode_id].kostenstellen %} 
+            {% if kostenstelle.id == erstattung.kostenstelle_id %}
+                Kostenstelle: {{ kostenstelle.name }} </br>
+            {% endif %}
+        {% endfor %}
+
+        {% for buchungskonto in  config["webling_api"].data[erstattung.buchungsperiode_id].buchungskonten %} 
+            {% if buchungskonto.id == erstattung.buchungskonto_soll_id %}
+                Buchungskonto Soll: {{ buchungskonto.name }} </br>
+            {% endif %}
+        {% endfor %}
+
+        {% for buchungskonto in  config["webling_api"].data[erstattung.buchungsperiode_id].buchungskonten %} 
+            {% if buchungskonto.id == erstattung.buchungskonto_haben_id %}
+                Buchungskonto Haben: {{ buchungskonto.name }} </br>
+            {% endif %}
+        {% endfor %}
+
+    {% endif %}
+    
+<hr>
+{% endmacro %}
+
+{% macro header_erstattungen(erstattung) %}
+<a href="{{ url_for('show_erstattung', erstattung_id=erstattung.id)}}">anzeigen</a> | 
+<a href="{{ url_for('edit_erstattung', erstattung_id=erstattung.id)}}">bearbeiten</a> | 
+<a href="{{ url_for('pay_erstattung', erstattung_id=erstattung.id)}}">bezahlen</a> |
+<a href="{{ url_for('book_erstattung', erstattung_id=erstattung.id)}}">verbuchen</a> |
+<a href="{{ url_for('delete_erstattung', erstattung_id=erstattung.id)}}">löschen</a>
+<hr>
+{% endmacro %}

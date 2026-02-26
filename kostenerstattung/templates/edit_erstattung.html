@@ -1,0 +1,12 @@
+{% from "macros.html" import header_erstattungen %}
+{% from 'bootstrap5/form.html' import render_form, render_field, render_form_row %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Kostenerstattung bearbeiten</h2>
+
+{{ header_erstattungen(erstattung) }}
+{{ render_form(form) }}
+
+{% endblock %}
+

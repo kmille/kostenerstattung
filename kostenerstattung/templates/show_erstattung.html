@@ -1,0 +1,13 @@
+{% from "macros.html" import show_erstattung, header_erstattungen %}
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Kostenerstattung anzeigen</h2>
+
+{{ header_erstattungen(erstattung) }}
+{{ show_erstattung(config, erstattung, belege) }}
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+{% endblock %}

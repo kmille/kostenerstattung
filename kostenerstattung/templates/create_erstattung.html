@@ -1,0 +1,49 @@
+{% from 'bootstrap5/form.html' import render_form, render_field, render_form_row %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Kostenerstattung/Rechnung einreichen</h2>
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    Informationen zum Thema Rechung findest du <a href="https://shoperate.com/de/wissen/rechnung-schreiben">hier</a> (Pflichtangaben, Kleinbetragsrechnung, Kleinunternehmer, Privatrechnung).
+</div>
+
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        Wenn du mehrere Sachen gleichzeitig einreichen möchtest: <strong>Verschiedene Kostenarten/stellen</strong> bitte nicht zusammen einreichen, da wir deine Einreichung verbuchen. Beispiele: </br>
+        <ul>
+            <li>Hin- und Rückfahrt für ein Präsenztreffen: OK </li>
+            <li>Fahrtkosten für verschiedene Anlässe (Wahlverteidigung, Präsenztreffen): bitte getrennt einreichen</li>
+            <li>Selber Anlass, verschieden Kostenarten (Fahrtkosten/Material/Lebensmittel für ein Training): bitte getrennt einreichen</li>
+        </ul>
+</div>
+
+{{ render_form(form, id="form_submit_erstattung") }}
+
+<script>
+    document.getElementById("form_submit_erstattung").onsubmit = function(event) {
+        if (document.getElementById("cache_in_browser").checked) {
+            localStorage.setItem("name", document.getElementById("name").value);
+            localStorage.setItem("email", document.getElementById("email").value);
+            localStorage.setItem("name_bank_account", document.getElementById("name_bank_account").value);
+            localStorage.setItem("iban", document.getElementById("iban").value);
+            localStorage.setItem("cache_form_data", true);
+        } else {
+            localStorage.clear();
+        }
+    };
+
+    if (localStorage.getItem("cache_form_data")) {
+        document.getElementById("name").value = localStorage.getItem("name");
+        document.getElementById("email").value = localStorage.getItem("email");
+        document.getElementById("name_bank_account").value = localStorage.getItem("name_bank_account");
+        document.getElementById("iban").value = localStorage.getItem("iban");
+        document.getElementById("cache_in_browser").checked = true;
+    }
+</script>
+
+{% endblock %}
+

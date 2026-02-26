@@ -1,0 +1,191 @@
+import requests
+from dataclasses import dataclass
+from typing import List
+from datetime import date, datetime
+
+import requests.exceptions
+
+import logging
+
+
+class Buchungsperiode:
+    def __init__(self, _id: str, api_data: dict):
+        self.id = _id
+        self.name = api_data["title"]
+        self._from = datetime.strptime(api_data["from"], "%Y-%m-%d").date()
+        self.to = datetime.strptime(api_data["to"], "%Y-%m-%d").date()
+
+    def __repr__(self):
+        return f"{self.name} ({self._from.strftime("%d.%m.%Y")} - {self.to.strftime("%d.%m.%Y")})"
+
+
+class Buchungskonto:
+    def __init__(self, api_data: dict):
+        self.id = api_data["id"]
+        self.name = api_data['properties']["title"]
+
+    def __repr__(self):
+        return f"{self.name}"
+
+
+class Kostenstelle:
+    def __init__(self, api_data: dict):
+        self.id = api_data["id"]
+        self.name = api_data['properties']["title"]
+
+    def __repr__(self):
+        return f"{self.name}"
+
+
+class Webling:
+
+    def __init__(self, base_url: str, api_key: str):
+        logging.info("Loading Webling configuration via API")
+        self.api_base_url = base_url + "/api/1"
+        self.session = requests.Session()
+        self.session.headers.update({"apikey": api_key})
+
+        self.data = {}
+        self.buchungsperioden = self._load_buchungsperioden()
+        #bp_tmp = [x for x in self.buchungsperioden if x.id == 15328][0]
+        #for buchungsperiode in [bp_tmp, ]:
+        #for buchungsperiode in self.buchungsperioden[:1]:
+        for buchungsperiode in self.buchungsperioden:
+            buchungskonten = self._get_buchungskonten(buchungsperiode.id)
+            kostenstellen = self._get_kostenstellen(buchungsperiode.id)
+            self.data[buchungsperiode.id] = {}
+            self.data[buchungsperiode.id]["buchungskonten"] = buchungskonten
+            self.data[buchungsperiode.id]["kostenstellen"] = kostenstellen
+
+    def _load_buchungsperioden(self):
+        logging.info("Loading Buchungsperioden from Webling API")
+        try:
+            resp = self.session.get(self.api_base_url + "/period/", params="format=full")
+            resp.raise_for_status()
+            buchungsperioden = []
+            for data in resp.json():
+                buchungsperioden.append(Buchungsperiode(data["id"], data["properties"]))
+            return buchungsperioden
+        except Exception as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"API response: {e.response.text}")
+            raise Exception(f"Could not load Buchungsperioden from Webling API: {e}") from e
+
+    def _get_buchungskonten(self, buchungsperiode_id: int):
+        logging.info(f"Loading Buchungskonten for Buchungsperiode {buchungsperiode_id} from Webling API")
+        try:
+            # type: account
+            resp = self.session.get(self.api_base_url + "/account", params=f"filter=$parents.$parents.$id={buchungsperiode_id}&format=full")
+            #print(resp.text)
+            resp.raise_for_status()
+            buchungskonten = []
+            for data in resp.json():
+                buchungskonten.append(Buchungskonto(data))
+            return buchungskonten
+        except Exception as e:
+            raise Exception(f"Could not load Buchungskonten from Webling API: {e}") from e
+
+    def _get_kostenstellen(self, buchungsperiode_id: int):
+        logging.info(f"Loading Kostenstellen for Buchungsperiode {buchungsperiode_id} from Webling API")
+        try:
+            resp = self.session.get(self.api_base_url + "/costcenter", params=f"filter=$parents.$id={buchungsperiode_id}&format=full")
+            #print(resp.text)
+            resp.raise_for_status()
+            kostenstellen = []
+            for data in resp.json():
+                kostenstellen.append(Kostenstelle(data))
+            return kostenstellen
+        except Exception as e:
+            raise Exception(f"Could not load Kostenstellen from Webling API: {e}") from e
+
+
+#def get_unverbuchte_payments():
+#    # resp = session.get(BASE_URL + "/payment", params="filter=amount=500")
+#    # resp = session.get(BASE_URL + "/payment", params="format=full&filter=`processed` IS EMPTY")
+#    resp = session.get(BASE_URL + "/payment",
+#                       params="filter=NOT `processed` IS EMPTY")
+#    print(resp.text)
+#    resp.raise_for_status()
+#    # for data in resp.json():
+#    #    print(data)
+#    print(len(resp.json()))
+
+    def create_buchung(self, erstattung, beleg):
+        # TODO attachment
+        # todo: kostenstelle
+        filename, _, content = beleg
+        data = {
+            "properties": {
+                "date": erstattung.created_at.date().isoformat(),
+                "title": erstattung.verwendungszweck
+            },
+            "children": {
+                "entry": [
+                    {
+                        "properties": {
+                            "amount": erstattung.betrag,
+                            "receipt": f"#{erstattung.ticket_number}",
+                            "isEBill": False,
+                            "receiptfile": {
+                                "name": filename,
+                                "content": content,
+                            }
+                        },
+                        "links": {
+                            "debit": [erstattung.buchungskonto_soll_id],
+                            "credit": [erstattung.buchungskonto_haben_id],
+                            "costcenter": [erstattung.kostenstelle_id],
+                        }
+                    }
+                ]
+            },
+            "parents": [
+                erstattung.buchungsperiode_id
+            ]
+
+        }
+        # import json
+        # print(json.dumps(data, indent=4))
+        try:
+            resp = self.session.post(self.api_base_url + "/entrygroup", json=data)
+            resp.raise_for_status()
+            # return entrygroup id
+            return resp.json()
+        except requests.exceptions.HTTPError as e:
+            print(e.response.text)
+            print(e)
+        except Exception as e:
+            print(e)
+
+    def get_buchungs_id(self, entrygroup_id: int) -> int:
+        # entrygroup_id is internal id of a Buchung, the returned entry id is the one shown in the web UI
+        try:
+            resp = self.session.get(self.api_base_url + f"/entrygroup/{entrygroup_id}")
+            resp.raise_for_status()
+            return resp.json()["properties"]["entryid"]
+        except requests.exceptions.HTTPError as e:
+            print(e.response.text)
+            print(e)
+        except Exception as e:
+            print(e)
+
+
+def print_webling_data():
+    from kostenerstattung.config import load_config
+    webling = load_config()["webling_api"]
+    print("Buchungsperioden")
+    for buchungsperiode in webling.buchungsperioden:
+        print(f"{buchungsperiode.id} | {str(buchungsperiode)}")
+    for buchungsperiode in webling.buchungsperioden:
+        print(f"Buchungsperiode: {buchungsperiode.id} | {buchungsperiode}")
+        data = webling.data[buchungsperiode.id]
+        print("Buchungskonten")
+        for buchungskonto in data["buchungskonten"]:
+            print(f"- {buchungskonto.id} {buchungskonto}")
+        print("Kostenstellen")
+        for kostenstelle in data["kostenstellen"]:
+            print(f"- {kostenstelle}")
+
+
+#if __name__ == '__main__':
+#    Webling()

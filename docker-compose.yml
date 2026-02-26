@@ -1,0 +1,19 @@
+---
+services:
+  kostenerstattung:
+    build: .
+    restart: "unless-stopped"
+    #command: sleep 99999999999
+    container_name: kostenerstattung-app
+    environment:
+      - CONFIG_FILE=/config.yml
+      - LOG_FILE=/data/kobu.log
+    volumes:
+      - ./docker-config.yml:/config.yml:ro
+      - ./data:/data
+    ports:
+      - 127.0.0.1:5000:5000
+    security_opt:
+      - no-new-privileges
+    cap_drop:
+      - ALL
