@@ -498,7 +498,7 @@ requires-dist = [
     { name = "flask-migrate", specifier = ">=4.1.0,<5.0.0" },
     { name = "flask-sqlalchemy", specifier = ">=3.1.1,<4.0.0" },
     { name = "flask-wtf", specifier = ">=1.2.2,<2.0.0" },
-    { name = "py-epc-qr", git = "https://github.com/kmille/py-epc-qr.git?rev=0.1.5" },
+    { name = "py-epc-qr", git = "https://github.com/kmille/py-epc-qr.git?rev=0.1.6" },
     { name = "python-magic", specifier = ">=0.4.27,<0.5.0" },
     { name = "pyyaml", specifier = ">=6.0.3,<7.0.0" },
     { name = "schwifty", specifier = ">=2026.1.0,<2027.0.0" },
@@ -725,8 +725,8 @@ wheels = [
 
 [[package]]
 name = "py-epc-qr"
-version = "0.1.5"
-source = { git = "https://github.com/kmille/py-epc-qr.git?rev=0.1.5#9c1ad0e26e0b3ffa137ca71e5e3c66853097dc0a" }
+version = "0.1.6"
+source = { git = "https://github.com/kmille/py-epc-qr.git?rev=0.1.6#d354620bc9203607876f26b9edd2d7a2b2e01423" }
 dependencies = [
     { name = "pyyaml" },
     { name = "qrcode", extra = ["pil"] },
