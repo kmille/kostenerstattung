@@ -21,6 +21,9 @@ dependencies = [
     "python-magic (>=0.4.27,<0.5.0)",
     "waitress (>=3.0.2,<4.0.0)",
     "flask-migrate (>=4.1.0,<5.0.0)",
+    "pypdf>=6.7.5",
+    "ocrmypdf>=16.13.0",
+    "img2pdf>=0.6.3",
 ]
 
 [tool.poetry]
@@ -29,6 +32,9 @@ packages = [{include = "kostenerstattung"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = []
 
 [tool.poetry.scripts]
 kostenerstattung = 'kostenerstattung.cli:main'

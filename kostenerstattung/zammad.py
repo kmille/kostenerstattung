@@ -1,5 +1,10 @@
 from zammad_py import ZammadAPI
 import logging
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from pypdf import PdfWriter
+import img2pdf
+from io import BytesIO
 
 
 class Zammad:
@@ -25,16 +30,16 @@ class Zammad:
         except Exception as e:
             raise Exception(f"Could not check/create customer in Zammad: {e}") from e
 
-    def create_ticket(self, name, email, body, belege):
+    def create_ticket(self, name, email, subject, body, belege):
         logging.debug(f"Creating ticket (email={email})")
         self._create_customer_if_not_exists(name, email)
 
         params = {
-            "title": "Neue Kostenerstattung",
+            "title": subject,
             "group": self.group,
             "customer": email,
             "article": {
-                "subject": "Neue Kostenerstattung",
+                "subject": subject,
                 "body": body,
                 "type": "note",
                 "internal": False,
@@ -110,3 +115,60 @@ class Zammad:
             self.client.ticket.update(ticket_id, params=params)
         except Exception as e:
             raise Exception(f"Could not update ticket state in Zammad: {e}") from e
+
+    def get_ticket(self, ticket_number: int) -> dict:
+        logging.debug(f"Looking for ticket number: {ticket_number}")
+        try:
+            tickets = self.client.ticket.search(f"number:{ticket_number}")
+            if len(tickets) == 0:
+                return {}
+            return tickets[0]
+        except Exception as e:
+            raise Exception(f"Could not get ticket in Zammad: {e}") from e
+
+    def _get_ticket_attachments(self, ticket_number: int):
+        ticket_id = self.get_ticket(ticket_number)["id"]
+        article = self.client.ticket.articles(ticket_id)[0]
+
+        for attachment in article["attachments"]:
+            attachment_id = attachment["id"]
+            filename = attachment["filename"]
+
+            data = self.client.ticket_article_attachment.download(ticket_id=ticket_id, article_id=article["id"], id=attachment_id)
+            yield Path(filename), data
+
+    def get_concatenated_attachments_from_ticket(self, ticket_number: int):
+        attachments = list(self._get_ticket_attachments(ticket_number))
+        if len(attachments) == 1:
+            return attachments[0]
+
+        with TemporaryDirectory() as tmp:
+            # 1) Write Zammad attachment to tmp dir (small file ending)
+            for filename, data in attachments:
+                out_file = tmp / Path(filename.stem + filename.suffix.lower())
+                logging.info(f"Writing ticket attachment to {out_file}")
+                out_file.write_bytes(data)
+
+            # 2) Convert images to pdf
+            for file in Path(tmp).iterdir():
+                if file.suffix.lower() in (".jpg", ".jpeg", ".png"):
+                    logging.info(f"Converting {file.name} from img to pdf")
+                    #ocrmypdf.ocr(file, (tmp / Path(file.name + ".pdf")), image_dpi=300)
+                    pdf = img2pdf.convert(file)
+                    (tmp / Path(file.name + ".pdf")).write_bytes(pdf)
+
+            # 3) Iterate over all PDFs and concat them
+            with PdfWriter() as writer:
+                for file in Path(tmp).iterdir():
+                    if file.suffix == ".pdf":
+                        writer.append(file)
+                out_file = tmp / Path("Belege.pdf")
+                logging.info(f"Writing merged file to {out_file}")
+                buf = BytesIO()
+                writer.write(buf)
+            return "Belege.pdf", buf.getvalue()
+
+            #logging.info("Running ocr")
+            #ocrmypdf.ocr(out_file,
+            #             out_file,
+            #             lang=["deu", "eng"], skip_text=True)

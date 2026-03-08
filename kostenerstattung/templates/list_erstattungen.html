@@ -1,10 +1,12 @@
 {% from 'bootstrap5/table.html' import render_table %}
+{% from "macros.html" import header_lastschriften %}
+
 {% extends 'base.html' %}
 
 {% block content %}
 <h2>Kostenerstattungen anzeigen</h2>
 
-<a href="{{ url_for("reload_config") }}">Konfiguration neu einlesen</a> </br></br>
+{{ header_lastschriften() }} 
 
 {{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
 

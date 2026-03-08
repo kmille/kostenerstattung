@@ -2,8 +2,12 @@ import requests
 from dataclasses import dataclass
 from typing import List
 from datetime import date, datetime
+from base64 import b64encode
+import json
 
 import requests.exceptions
+
+from kostenerstattung.utils import get_version
 
 import logging
 
@@ -43,7 +47,8 @@ class Webling:
         logging.info("Loading Webling configuration via API")
         self.api_base_url = base_url + "/api/1"
         self.session = requests.Session()
-        self.session.headers.update({"apikey": api_key})
+        self.session.headers.update({"apikey": api_key,
+                                     "User-Agent": f"Kobu {get_version}"})
 
         self.data = {}
         self.buchungsperioden = self._load_buchungsperioden()
@@ -56,6 +61,7 @@ class Webling:
             self.data[buchungsperiode.id] = {}
             self.data[buchungsperiode.id]["buchungskonten"] = buchungskonten
             self.data[buchungsperiode.id]["kostenstellen"] = kostenstellen
+        self.lastschriften = list(self._load_unverbuchte_lastschriften())
 
     def _load_buchungsperioden(self):
         logging.info("Loading Buchungsperioden from Webling API")
@@ -98,59 +104,64 @@ class Webling:
         except Exception as e:
             raise Exception(f"Could not load Kostenstellen from Webling API: {e}") from e
 
+    def _load_unverbuchte_lastschriften(self):
+        logging.info("Loading unverbuchte Lastschriften from Webling API")
+        # resp = session.get(BASE_URL + "/payment", params="filter=amount=500")
+        # resp = session.get(BASE_URL + "/payment", params="format=full&filter=`processed` IS EMPTY")
+        try:
+            #resp = self.session.get(self.api_base_url + "/payment", params="filter=`processed` IS EMPTY&format=full")
+            resp = self.session.get(self.api_base_url + "/payment", params="filter=`processed` != 'processed'&format=full")
 
-#def get_unverbuchte_payments():
-#    # resp = session.get(BASE_URL + "/payment", params="filter=amount=500")
-#    # resp = session.get(BASE_URL + "/payment", params="format=full&filter=`processed` IS EMPTY")
-#    resp = session.get(BASE_URL + "/payment",
-#                       params="filter=NOT `processed` IS EMPTY")
-#    print(resp.text)
-#    resp.raise_for_status()
-#    # for data in resp.json():
-#    #    print(data)
-#    print(len(resp.json()))
+            resp.raise_for_status()
+            for payment in resp.json():
+                payment_date = datetime.strptime(payment["properties"]["date"], "%Y-%m-%d")
+                if payment_date.year == datetime.now().date().year:
+                    yield payment
+        except Exception as e:
+            raise Exception(f"Could not load Lastschriften from Webling API: {e}") from e
 
-    def create_buchung(self, erstattung, beleg):
-        # TODO attachment
-        # todo: kostenstelle
-        filename, _, content = beleg
+    def create_buchung(self, erstattung, payment_id, beleg):
+        logging.debug("Creating Buchung in Webling")
         data = {
             "properties": {
                 "date": erstattung.created_at.date().isoformat(),
-                "title": erstattung.verwendungszweck
+                "title": erstattung.verwendungszweck,
             },
             "children": {
                 "entry": [
                     {
                         "properties": {
-                            "amount": erstattung.betrag,
-                            "receipt": f"#{erstattung.ticket_number}",
+                            "amount": abs(erstattung.betrag),
+                            "receipt": erstattung.ticket_number,
                             "isEBill": False,
-                            "receiptfile": {
-                                "name": filename,
-                                "content": content,
-                            }
                         },
                         "links": {
                             "debit": [erstattung.buchungskonto_soll_id],
                             "credit": [erstattung.buchungskonto_haben_id],
                             "costcenter": [erstattung.kostenstelle_id],
+                            "payment": [payment_id],
                         }
                     }
                 ]
             },
-            "parents": [
-                erstattung.buchungsperiode_id
-            ]
-
+            "parents": [erstattung.buchungsperiode_id]
         }
-        # import json
-        # print(json.dumps(data, indent=4))
+
+        logging.debug(f"Create Buchung request body: {json.dumps(data, indent=4)}")
+
+        if beleg:
+            filename, beleg_data = beleg
+            attachment = {"receiptfile": {
+                          "name": filename,
+                          "content": b64encode(beleg_data).decode()}}
+            data["children"]["entry"][0]["properties"].update(attachment)
+
         try:
             resp = self.session.post(self.api_base_url + "/entrygroup", json=data)
             resp.raise_for_status()
-            # return entrygroup id
-            return resp.json()
+            logging.debug(f"Created Buchung:{resp.text}")
+            # just the entry/Buchungs-ID
+            return resp.text
         except requests.exceptions.HTTPError as e:
             print(e.response.text)
             print(e)

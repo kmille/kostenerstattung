@@ -1,10 +1,11 @@
+import json
 import logging
 from functools import wraps
 from datetime import datetime
 from flask_bootstrap import Bootstrap5
 from markupsafe import escape
 import waitress
-from flask import Flask, render_template, redirect, url_for, flash, request, session, send_from_directory
+from flask import Flask, render_template, redirect, url_for, flash, request, session, send_from_directory, abort
 import argon2
 
 from kostenerstattung.config import load_config
@@ -16,7 +17,7 @@ logging.getLogger("alembic").setLevel(logging.WARNING)
 
 from flask_migrate import Migrate
 from kostenerstattung.utils import save_belege, get_belege, generate_ticket_data, get_version, generate_qrcode, delete_belege_dir, get_version
-from kostenerstattung.forms import ErstattungEinreichenFormular, ErstattungAendernFormular, VerbuchungsFormular, LoginForm, ErstattungLoeschenForm, BezahlungsFormular, WeblingReloadForm
+from kostenerstattung.forms import ErstattungEinreichenFormular, ErstattungAendernFormular, VerbuchungsFormular, LoginForm, ErstattungLoeschenForm, BezahlungsFormular, WeblingReloadForm, LastschriftVerbuchungsFormular
 
 app = Flask(__name__)
 app.secret_key = config["secret_key"]
@@ -64,9 +65,10 @@ def index():
         try:
             url_erstattung = config["hostname_base_url"] + url_for('show_erstattung', erstattung_id=erstattung.id)
             body = generate_ticket_data(url_erstattung, form)
+            subject = erstattung.description[:80]
             # TODO: optimize that
             belege = get_belege(config["upload_dir"], erstattung.id, b64encoded=True)
-            ticket_id, ticket_number = config["zammad_api"].create_ticket(form.name.data, form.email.data, body, belege)
+            ticket_id, ticket_number = config["zammad_api"].create_ticket(form.name.data, form.email.data, subject, body, belege)
             erstattung.ticket_id = ticket_id
             erstattung.ticket_number = ticket_number
             db.session.commit()
@@ -208,6 +210,24 @@ def pay_erstattung(erstattung_id):
 #        flash("Kostenstelle/Kostenart gespeichert")
 
 
+def get_pre_filled_verbuchungs_formular():
+    form = LastschriftVerbuchungsFormular()
+    form.buchungsperiode.choices = [(x.id, str(x)) for x in config["webling_api"].buchungsperioden]
+
+    if config["webling"]["default_buchungskonto_haben_id"]:
+        form.buchungskonto_haben.default = int(config["webling"]["default_buchungskonto_haben_id"])
+        form.buchungskonto_haben.process([])
+
+    buchungs_periode_id = int(request.args.get("buchungsperiode", int(config["webling"]["default_buchungsperiode_id"])))
+    form.buchungsperiode.default = buchungs_periode_id
+    form.buchungsperiode.process([])
+
+    form.kostenstelle.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["kostenstellen"]]
+    form.buchungskonto_soll.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["buchungskonten"]]
+    form.buchungskonto_haben.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["buchungskonten"]]
+    return form
+
+
 @app.route("/erstattung/<int:erstattung_id>/verbuchen", methods=["GET", "POST"])
 @login_required
 def book_erstattung(erstattung_id):
@@ -218,7 +238,9 @@ def book_erstattung(erstattung_id):
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
     form = VerbuchungsFormular(request.form, obj=erstattung)
-    if form.validate_on_submit():
+    if request.method == "GET":
+        form = get_pre_filled_verbuchungs_formular()
+    elif form.validate_on_submit():
         erstattung.state = ErstattungsState.BOOKED
         erstattung.booked_at = datetime.now()
         erstattung.buchungsperiode_id = int(form.buchungsperiode.data)
@@ -230,25 +252,12 @@ def book_erstattung(erstattung_id):
         #config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_payed"])
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
     else:
-        #form = VerbuchungsFormular(obj=erstattung)
-        form.buchungsperiode.choices = [(x.id, str(x)) for x in config["webling_api"].buchungsperioden]
-
-        if config["webling"]["default_buchungskonto_haben_id"]:
-            form.buchungskonto_haben.default = int(config["webling"]["default_buchungskonto_haben_id"])
-            form.buchungskonto_haben.process([])
-
-        buchungs_periode_id = int(request.args.get("buchungsperiode", int(config["webling"]["default_buchungsperiode_id"])))
-        form.buchungsperiode.default = buchungs_periode_id
-        form.buchungsperiode.process([])
-
-        form.kostenstelle.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["kostenstellen"]]
-        form.buchungskonto_soll.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["buchungskonten"]]
-        form.buchungskonto_haben.choices = [(x.id, x.name) for x in config["webling_api"].data[buchungs_periode_id]["buchungskonten"]]
+        form = VerbuchungsFormular(obj=erstattung)
         belege = get_belege(config["upload_dir"], erstattung_id)
-        return render_template("book_erstattung.html",
-                               form=form,
-                               erstattung=erstattung,
-                               belege=belege)
+    return render_template("book_erstattung.html",
+                           form=form,
+                           erstattung=erstattung,
+                           belege=belege)
 
 
 @app.route("/erstattung/<int:erstattung_id>/loeschen", methods=["GET", "POST"])
@@ -264,6 +273,85 @@ def delete_erstattung(erstattung_id):
         flash("Die Erstattung wurde gelöscht.", "success")
         return redirect(url_for("list_erstattungen"))
     return render_template("delete_erstattung.html", erstattung=erstattung, form=form)
+
+
+@app.route("/lastschriften")
+@login_required
+def list_lastschriften():
+    lastschriften = config["webling_api"].lastschriften
+    titles = [("id", "#"), ("created_at", "Datum"), ("name", "Name"), ("description", "Verwendungszweck"), ("betrag", "Betrag")]
+    rows = []
+    for lastschrift in lastschriften:
+        #print(json.dumps(json.loads(lastschrift["properties"]["data"]), indent=4))
+        #if "mmel-Basislastschrift mit 2 Lastschriften MSG-ID: twingle-" in lastschrift["properties"]["title"]:
+        #    breakpoint()
+        if lastschrift["properties"]["amount"] > 0:
+            name = json.loads(lastschrift["properties"]["data"]).get("extra_payer_information", "")
+        else:
+            name = json.loads(lastschrift["properties"]["data"]).get("extra_payee_information", "")
+        if name == "":
+            # das ist bei Twingle Lastschriften so (Guthaben)
+            name = json.loads(lastschrift["properties"]["data"]).get("extra_payee_information", "???")
+        row = {"id": lastschrift["id"],
+               "created_at": datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d").strftime("%d.%m.%Y"),
+               "name": name,
+               "description": lastschrift["properties"]["title"],
+               "betrag": f"{lastschrift["properties"]["amount"]:.2f}".replace(".", ",")}
+        rows.append(row)
+    rows.sort(key=lambda x: x["id"], reverse=True)
+    return render_template("list_lastschriften.html",
+                           rows=rows,
+                           titles=titles)
+
+
+@app.route("/lastschrift/<int:lastschrift_id>/verbuchen", methods=["GET", "POST"])
+@login_required
+def book_lastschrift(lastschrift_id):
+
+    lastschrift = {}
+    for lastschrift_iter in config["webling_api"].lastschriften:
+        if lastschrift_iter["id"] == lastschrift_id:
+            lastschrift = lastschrift_iter
+            break
+    if lastschrift == {}:
+        abort(404)
+
+    if request.method == "GET":
+        form = get_pre_filled_verbuchungs_formular()
+    else:
+        form = LastschriftVerbuchungsFormular()
+        if form.validate_on_submit():
+
+            beleg = None
+            ticket_number = ""
+            if len(form.ticket_number.data) != 0:
+                ticket_number = "#" + form.ticket_number.data.replace("Ticket#", "")
+                beleg = config["zammad_api"].get_concatenated_attachments_from_ticket(ticket_number)
+
+            erstattung = TableErstattung(created_at=datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d"),
+                                         verwendungszweck=lastschrift["properties"]["title"],
+                                         betrag=lastschrift["properties"]["amount"],
+                                         ticket_number=ticket_number,
+                                         buchungskonto_soll_id=int(form.buchungskonto_soll.data),
+                                         buchungskonto_haben_id=int(form.buchungskonto_haben.data),
+                                         kostenstelle_id=int(form.kostenstelle.data),
+                                         buchungsperiode_id=int(form.buchungsperiode.data))
+            booking_id = config["webling_api"].create_buchung(erstattung, lastschrift["id"], beleg)
+            webling_booking_url = f"{config['webling']['base_url']}/admin#/accounting/{config['webling']['default_buchungsperiode_id']}/entrygroup/:entrygroup/editor/{booking_id}"
+            flash(f'Die Lastschrift wurde erfolgreich in Twingle verbucht (<a href={webling_booking_url}">link</a>).', "success")
+            # TODO: close ticket?
+            #config["webling_api"].lastschriften.remove(lastschrift)
+            #return redirect(url_for("list_lastschriften"))
+    return render_template("book_lastschrift.html",
+                           lastschrift=lastschrift,
+                           form=form)
+
+
+@app.route("/api/v1/ticket/<ticket_id>")
+@login_required
+def get_ticket(ticket_id):
+    ticket_id = ticket_id.replace("Ticket#", "")
+    return config["zammad_api"].get_ticket(ticket_id)
 
 
 @app.route("/config", methods=["GET", "POST"])

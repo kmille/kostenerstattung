@@ -1,0 +1,23 @@
+{% from 'bootstrap5/table.html' import render_table %}
+{% from "macros.html" import header_lastschriften %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Unverbuchte Lastschriften anzeigen</h2>
+
+{{ header_lastschriften() }}
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+{{ render_table(rows, titles, show_actions=True,
+    custom_actions=[
+    (
+        'verbuchen',
+        'book',
+        ('book_lastschrift', [('lastschrift_id', ':id')])
+    ),
+    ])
+
+}}
+
+{% endblock %}

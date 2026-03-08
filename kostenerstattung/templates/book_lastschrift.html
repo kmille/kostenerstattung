@@ -1,0 +1,53 @@
+{% from 'bootstrap5/form.html' import render_form %}
+{% from "macros.html" import show_erstattung, header_erstattungen %}
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Lastschrift verbuchen</h2>
+
+{{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
+
+Datum: {{ lastschrift["properties"]["date"] }} </br>
+Name: {{ lastschrift["properties"]["customername"] }} </br>
+Verwendungszweck: {{ lastschrift["properties"]["title"] }} </br>
+Betrag: {{ lastschrift["properties"]["amount"] }} </br>
+
+<hr>
+{{ render_form(form) }}
+
+
+<div id="ticket_data">
+</div>
+
+
+<script>
+const ticket_data = document.getElementById('ticket_data');
+
+window.onload = function () {
+
+    document.getElementById('ticket_number').addEventListener('input', async (e) => {
+      const id = document.getElementById('ticket_number').value.trim();
+      if (!id) return;
+
+      try {
+        const res = await fetch(`/api/v1/ticket/` + encodeURIComponent(id));
+        const data = await res.json();
+
+        if (Object.keys(data).length === 0) {
+          ticket_data.textContent = 'Es wurde kein Ticket mit dieser Ticket Nummer gefunden.';
+          ticket_data.style.color = 'red';
+        } else {
+          ticket_data.innerHTML = "Ticket gefunden: <strong>" + data.title + " (" + data.customer + ")</strong>";
+          ticket_data.style.color = 'black';
+        }
+      } catch (e) {
+          ticket_data.textContent = 'Fehler:' + e;
+          ticket_data.style.color = 'red';
+      }
+    });
+
+};
+
+</script>
+
+{% endblock %}

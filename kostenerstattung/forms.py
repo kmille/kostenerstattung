@@ -68,6 +68,12 @@ class VerbuchungsFormular(FlaskForm):
     submit = SubmitField("Erstattung verbuchen")
 
 
+class LastschriftVerbuchungsFormular(VerbuchungsFormular):
+    ticket_number = StringField("Ticket Nummer")
+    close_ticket = BooleanField("Ticket schließen?")
+    submit = SubmitField("Lastschrift verbuchen")
+
+
 class LoginForm(FlaskForm):
     password = PasswordField("Passwort", validators=[DataRequired()])
     submit = SubmitField("Login")
@@ -78,4 +84,4 @@ class ErstattungLoeschenForm(FlaskForm):
 
 
 class WeblingReloadForm(FlaskForm):
-    submit = SubmitField("Webling Konfiguration neu laden")
+    submit = SubmitField("Webling Daten abrufen")
