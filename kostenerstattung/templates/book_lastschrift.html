@@ -1,5 +1,4 @@
 {% from 'bootstrap5/form.html' import render_form %}
-{% from "macros.html" import show_erstattung, header_erstattungen %}
 {% extends 'base.html' %}
 
 {% block content %}
@@ -10,14 +9,12 @@
 Datum: {{ lastschrift["properties"]["date"] }} </br>
 Name: {{ lastschrift["properties"]["customername"] }} </br>
 Verwendungszweck: {{ lastschrift["properties"]["title"] }} </br>
-Betrag: {{ lastschrift["properties"]["amount"] }} </br>
+Betrag: {{ lastschrift["properties"]["amount"] | string | replace('.', ',') }} </br>
 
 <hr>
 {{ render_form(form) }}
 
-
-<div id="ticket_data">
-</div>
+<div id="ticket_data"></div>
 
 
 <script>
@@ -26,11 +23,11 @@ const ticket_data = document.getElementById('ticket_data');
 window.onload = function () {
 
     document.getElementById('ticket_number').addEventListener('input', async (e) => {
-      const id = document.getElementById('ticket_number').value.trim();
-      if (!id) return;
+      const ticketID = document.getElementById('ticket_number').value.trim();
+      if (!ticketID) return;
 
       try {
-        const res = await fetch(`/api/v1/ticket/` + encodeURIComponent(id));
+        const res = await fetch(`/api/v1/ticket/` + encodeURIComponent(ticketID));
         const data = await res.json();
 
         if (Object.keys(data).length === 0) {

@@ -23,7 +23,7 @@ def main():
         for erstattung in booked_erstattungen:
             logging.info(f"Doing {erstattung}")
             # TODO: abgleichen mit "überweisung ohne Buchung"
-            belege = list(get_belege(config["upload_dir"], erstattung.id, b64encoded=True))[0]
+            belege = list(get_belege(config["belege_dir"], erstattung.id, b64encoded=True))[0]
             entrygroup_id = config["webling_api"].create_buchung(erstattung, belege)
             buchungs_id = config["webling_api"].get_buchungs_id(entrygroup_id)
             logging.info(f"Die Erstatung {erstattung.id} wurde in Webling verbucht (Buchung {buchungs_id})")

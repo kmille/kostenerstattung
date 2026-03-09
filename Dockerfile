@@ -1,9 +1,8 @@
 FROM python:3.14-alpine3.23 AS builder
-RUN apk add git gcc && \
-    pip install poetry
+RUN apk add git gcc uv
 COPY . /app
 WORKDIR /app
-RUN poetry build --format=wheel
+RUN uv build --wheel
 
 
 FROM python:3.14-alpine3.23

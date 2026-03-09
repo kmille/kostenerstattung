@@ -1,11 +1,11 @@
 {% from 'bootstrap5/form.html' import render_form %}
-{% from "macros.html" import show_erstattung, header_erstattungen %}
+{% from "macros.html" import show_erstattung, menu_erstattungen %}
 {% extends 'base.html' %}
 
 {% block content %}
 <h2>Kostenerstattung bezahlen</h2>
 
-{{ header_erstattungen(erstattung) }}
+{{ menu_erstattungen(erstattung) }}
 {{ show_erstattung(config, erstattung, belege) }}
 
 {% if qrcode %}

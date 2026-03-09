@@ -1,5 +1,6 @@
 data
-*config*.yml
+*kobu*.yml
+*docker-config*.yml
 TODOS.txt
 *.db
 bootstrap-flask

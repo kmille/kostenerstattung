@@ -1,12 +1,12 @@
 {% from 'bootstrap5/table.html' import render_table %}
-{% from "macros.html" import header_lastschriften %}
+{% from "macros.html" import menu_lastschriften %}
 
 {% extends 'base.html' %}
 
 {% block content %}
 <h2>Kostenerstattungen anzeigen</h2>
 
-{{ header_lastschriften() }} 
+{{ menu_lastschriften() }} 
 
 {{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
 
@@ -56,8 +56,5 @@
     ),
     ])
 }}
-
-
-{{ hi }}
 
 {% endblock %}

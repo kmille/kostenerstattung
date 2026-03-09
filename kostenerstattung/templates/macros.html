@@ -4,10 +4,10 @@
     Eingereicht von {{ erstattung.name }} ({{ erstattung.email }})</br>
     Bank: {{ erstattung.name_bank_account }} ({{ erstattung.iban }})</br>
     Betrag:: {{ erstattung.betrag | string | replace('.', ',') }} Euro</br>
-    Beschreibung:</br>{{ erstattung.description.replace("\n", "</br>") | safe}}</br>
+    Beschreibung: {{ erstattung.description }}</br>
     Belege: 
     {% for beleg in belege %}
-        <a href="/erstattung/{{erstattung.id}}/belege/{{beleg.name}}">{{ beleg.name }}</a> | 
+        <a href="{{ url_for('show_beleg', erstattung_id=erstattung.id, beleg_name=beleg.name)}}">{{ beleg.name }}</a> | 
     {% endfor %}
     </br>
     Ticket: <a href="{{ config['zammad']['api_base_url'] }}/#ticket/zoom/{{ erstattung.ticket_id}}">#{{ erstattung.ticket_number}}</a></br>
@@ -49,7 +49,7 @@
 <hr>
 {% endmacro %}
 
-{% macro header_erstattungen(erstattung) %}
+{% macro menu_erstattungen(erstattung) %}
     <a href="{{ url_for('show_erstattung', erstattung_id=erstattung.id)}}">anzeigen</a> | 
     <a href="{{ url_for('edit_erstattung', erstattung_id=erstattung.id)}}">bearbeiten</a> | 
     <a href="{{ url_for('pay_erstattung', erstattung_id=erstattung.id)}}">bezahlen</a> |
@@ -58,7 +58,7 @@
     <hr>
 {% endmacro %}
 
-{% macro header_lastschriften() %}
+{% macro menu_lastschriften() %}
     <a href="{{ url_for("reload_config") }}">Konfiguration neu einlesen</a> |
     <a href="{{ url_for("list_lastschriften") }}">Lastschriften verbuchen</a>
     </br></br>

@@ -1,5 +1,6 @@
 from zammad_py import ZammadAPI
 import logging
+import requests
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from pypdf import PdfWriter
@@ -10,10 +11,17 @@ from io import BytesIO
 class Zammad:
 
     def __init__(self, base_url: str, http_token: str, group: str):
-        self.client = ZammadAPI(url=base_url + "/api/v1", http_token=http_token)
+        logging.info("Initializing Zammd API")
         self.group = group
+        self.client = ZammadAPI(url=base_url + "/api/v1", http_token=http_token)
+        try:
+            self.client.user.me()
+        except Exception as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception(f"Could not initialize Zammad: {e}")
 
-    def _create_customer_if_not_exists(self, name: str, email: str):
+    def _create_customer_if_not_exists(self, name: str, email: str) -> None:
         logging.debug(f"Creating customer {name} ({email}) in Zammad")
         try:
             if len(self.client.user.search(email)) > 0:
@@ -26,13 +34,14 @@ class Zammad:
                     "roles": ["Customer", ],
                 }
                 customer = self.client.user.create(customer_data)
-                logging.debug(f"Successfully creatd customer {name} (email={email}): /#user/profile/{customer['id']}")
+                logging.debug(f"Successfully created customer {name} (email={email}): /#user/profile/{customer['id']}")
         except Exception as e:
-            raise Exception(f"Could not check/create customer in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception(f"Could not check/create customer in Zammad ({name} | {email}") from e
 
     def create_ticket(self, name, email, subject, body, belege):
-        logging.debug(f"Creating ticket (email={email})")
-        self._create_customer_if_not_exists(name, email)
+        logging.debug(f"Creating ticket for {name} ({email} | {subject})")
 
         params = {
             "title": subject,
@@ -49,10 +58,11 @@ class Zammad:
         }
 
         for beleg in belege:
-            attachment = {"filename": beleg[0],
-                          "mime-type": beleg[1],
-                          "data": beleg[2]
-                          }
+            attachment = {
+                "filename": beleg[0],
+                "mime-type": beleg[1],
+                "data": beleg[2]
+            }
             params["article"]["attachments"].append(attachment)
 
         """
@@ -63,16 +73,19 @@ class Zammad:
         """
 
         try:
+            self._create_customer_if_not_exists(name, email)
             ticket_data = self.client.ticket.create(params=params)
             ticket_id = ticket_data["id"]
             ticket_number = ticket_data["number"]
             logging.info(f"Successfully created ticket {ticket_id} (#{ticket_number})")
             return ticket_id, ticket_number
         except Exception as e:
-            raise Exception(f"Could not create ticket in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not create ticket in Zammad") from e
 
     def create_article(self, ticket_id: int, subject: str, body: str, to: str = ""):
-        logging.debug(f"Creating ticket artickle for ticket {ticket_id} (subject={subject})")
+        logging.debug(f"Creating ticket article for ticket {ticket_id} (subject={subject})")
         # https://docs.zammad.org/en/latest/api/ticket/articles.html
         # if to is set, send an email
         params = {
@@ -90,21 +103,27 @@ class Zammad:
         try:
             self.client.ticket_article.create(params=params)
         except Exception as e:
-            raise Exception(f"Could not create ticket article in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not create ticket article in Zammad") from e
 
     def add_tag(self, ticket_id: int, tag: str):
         logging.debug(f"Adding tag {tag} to ticket {ticket_id}")
         try:
             self.client.ticket_tag.add(ticket_id, tag)
         except Exception as e:
-            raise Exception(f"Could not add tag to ticket in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not add tag to ticket in Zammad") from e
 
     def remove_tag(self, ticket_id: int, tag: str):
         logging.debug(f"Removing tag {tag} to ticket {ticket_id}")
         try:
             self.client.ticket_tag.remove(ticket_id, tag)
         except Exception as e:
-            raise Exception(f"Could not remove tag to ticket in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not remove tag to ticket in Zammad") from e
 
     def update_state(self, ticket_id: int, state: str):
         logging.debug(f"Updating ticket state to {state} to ticket {ticket_id}")
@@ -114,30 +133,42 @@ class Zammad:
         try:
             self.client.ticket.update(ticket_id, params=params)
         except Exception as e:
-            raise Exception(f"Could not update ticket state in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not update ticket state in Zammad") from e
 
-    def get_ticket(self, ticket_number: int) -> dict:
-        logging.debug(f"Looking for ticket number: {ticket_number}")
+    def search_ticket(self, ticket_number: int) -> dict:
+        logging.debug(f"Searching for a ticket: {ticket_number}")
         try:
             tickets = self.client.ticket.search(f"number:{ticket_number}")
             if len(tickets) == 0:
                 return {}
             return tickets[0]
         except Exception as e:
-            raise Exception(f"Could not get ticket in Zammad: {e}") from e
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception("Could not search for tickets in Zammad") from e
 
     def _get_ticket_attachments(self, ticket_number: int):
-        ticket_id = self.get_ticket(ticket_number)["id"]
-        article = self.client.ticket.articles(ticket_id)[0]
+        try:
+            ticket_id = self.search_ticket(ticket_number)["id"]
+            article = self.client.ticket.articles(ticket_id)[0]
 
-        for attachment in article["attachments"]:
-            attachment_id = attachment["id"]
-            filename = attachment["filename"]
+            for attachment in article["attachments"]:
+                attachment_id = attachment["id"]
+                filename = attachment["filename"]
 
-            data = self.client.ticket_article_attachment.download(ticket_id=ticket_id, article_id=article["id"], id=attachment_id)
-            yield Path(filename), data
+                data = self.client.ticket_article_attachment.download(ticket_id=ticket_id,
+                                                                      article_id=article["id"],
+                                                                      id=attachment_id)
+                yield Path(filename), data
+        except Exception as e:
+            if isinstance(e, requests.exceptions.HTTPError):
+                logging.error(f"Zammad API Response: {e.response.text}")
+            raise Exception(f"Could not get attachments from ticket #{ticket_number}")
 
     def get_concatenated_attachments_from_ticket(self, ticket_number: int):
+        logging.info(f"Concatening attachments of ticket #{ticket_number}")
         attachments = list(self._get_ticket_attachments(ticket_number))
         if len(attachments) == 1:
             return attachments[0]

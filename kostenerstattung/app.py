@@ -3,7 +3,6 @@ import logging
 from functools import wraps
 from datetime import datetime
 from flask_bootstrap import Bootstrap5
-from markupsafe import escape
 import waitress
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_from_directory, abort
 import argon2
@@ -16,7 +15,7 @@ if config["debug"]:
 logging.getLogger("alembic").setLevel(logging.WARNING)
 
 from flask_migrate import Migrate
-from kostenerstattung.utils import save_belege, get_belege, generate_ticket_data, get_version, generate_qrcode, delete_belege_dir, get_version
+from kostenerstattung.utils import save_belege, get_belege, generate_ticket_body_text, get_version, generate_qrcode, delete_belege_dir
 from kostenerstattung.forms import ErstattungEinreichenFormular, ErstattungAendernFormular, VerbuchungsFormular, LoginForm, ErstattungLoeschenForm, BezahlungsFormular, WeblingReloadForm, LastschriftVerbuchungsFormular
 
 app = Flask(__name__)
@@ -58,16 +57,16 @@ def index():
         erstattung.state = ErstattungsState.NEW
         db.session.add(erstattung)
         db.session.commit()
-        save_belege(config["upload_dir"], erstattung.id, form.belege)
+        save_belege(config["belege_dir"], erstattung.id, form.belege)
         flash("Das Formular wurde erfolgreich abgeschickt.", "success")
         logging.info(f"Saved new Erstattung to databases ({erstattung})")
 
         try:
             url_erstattung = config["hostname_base_url"] + url_for('show_erstattung', erstattung_id=erstattung.id)
-            body = generate_ticket_data(url_erstattung, form)
+            body = generate_ticket_body_text(url_erstattung, form)
             subject = erstattung.description[:80]
             # TODO: optimize that
-            belege = get_belege(config["upload_dir"], erstattung.id, b64encoded=True)
+            belege = get_belege(config["belege_dir"], erstattung.id, b64encoded=True)
             ticket_id, ticket_number = config["zammad_api"].create_ticket(form.name.data, form.email.data, subject, body, belege)
             erstattung.ticket_id = ticket_id
             erstattung.ticket_number = ticket_number
@@ -107,14 +106,14 @@ def list_erstattungen():
 @login_required
 def show_beleg(erstattung_id, beleg_name):
     _ = db.get_or_404(TableErstattung, erstattung_id)
-    return send_from_directory(config["upload_dir"] / str(erstattung_id), beleg_name)
+    return send_from_directory(config["belege_dir"] / str(erstattung_id), beleg_name)
 
 
 @app.route("/erstattung/<int:erstattung_id>/anzeigen")
 @login_required
 def show_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
-    belege = get_belege(config["upload_dir"], erstattung_id)
+    belege = get_belege(config["belege_dir"], erstattung_id)
     return render_template("show_erstattung.html", erstattung=erstattung, belege=belege)
 
 
@@ -145,7 +144,7 @@ def pay_erstattung(erstattung_id):
         flash("Diese Kostenerstattung wurde schon verbucht und darf nicht nochmal überwiesen werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
-    belege = get_belege(config["upload_dir"], erstattung_id)
+    belege = get_belege(config["belege_dir"], erstattung_id)
     qrcode = None
 
     form = BezahlungsFormular()
@@ -212,6 +211,7 @@ def pay_erstattung(erstattung_id):
 
 def get_pre_filled_verbuchungs_formular():
     form = LastschriftVerbuchungsFormular()
+    #form = VerbuchungsFormular()
     form.buchungsperiode.choices = [(x.id, str(x)) for x in config["webling_api"].buchungsperioden]
 
     if config["webling"]["default_buchungskonto_haben_id"]:
@@ -238,6 +238,7 @@ def book_erstattung(erstattung_id):
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
     form = VerbuchungsFormular(request.form, obj=erstattung)
+    belege = get_belege(config["belege_dir"], erstattung_id)
     if request.method == "GET":
         form = get_pre_filled_verbuchungs_formular()
     elif form.validate_on_submit():
@@ -253,7 +254,6 @@ def book_erstattung(erstattung_id):
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
     else:
         form = VerbuchungsFormular(obj=erstattung)
-        belege = get_belege(config["upload_dir"], erstattung_id)
     return render_template("book_erstattung.html",
                            form=form,
                            erstattung=erstattung,
@@ -267,7 +267,7 @@ def delete_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
     form = ErstattungLoeschenForm()
     if form.validate_on_submit():
-        delete_belege_dir(config["upload_dir"], erstattung.id)
+        delete_belege_dir(config["belege_dir"], erstattung.id)
         db.session.delete(erstattung)
         db.session.commit()
         flash("Die Erstattung wurde gelöscht.", "success")
@@ -351,7 +351,7 @@ def book_lastschrift(lastschrift_id):
 @login_required
 def get_ticket(ticket_id):
     ticket_id = ticket_id.replace("Ticket#", "")
-    return config["zammad_api"].get_ticket(ticket_id)
+    return config["zammad_api"].search_ticket(ticket_id)
 
 
 @app.route("/config", methods=["GET", "POST"])
