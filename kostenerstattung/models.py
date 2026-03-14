@@ -2,6 +2,8 @@ from enum import Enum
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 
+from kostenerstattung.utils import generate_qrcode
+
 db = SQLAlchemy()
 
 
@@ -43,3 +45,11 @@ class TableErstattung(db.Model):
 
     def __str__(self):
         return f"Erstattung #{self.id}"
+
+    def create_qr_code(self) -> bytes:
+        return generate_qrcode(
+            self.verwendungszweck,
+            self.iban,
+            self.betrag,
+            self.name_bank_account
+        )

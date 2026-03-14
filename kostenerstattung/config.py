@@ -30,3 +30,9 @@ def load_config() -> dict:
     except Exception as e:
         logging.error(f"Could not load config file: {e}")
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    config = load_config()
+    ticket_number = "901108"
+    config["zammad_api"].get_concatenated_attachments_from_ticket(ticket_number)

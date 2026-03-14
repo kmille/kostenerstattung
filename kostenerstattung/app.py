@@ -1,3 +1,4 @@
+import sys
 import json
 import logging
 from functools import wraps
@@ -15,16 +16,17 @@ if config["debug"]:
 logging.getLogger("alembic").setLevel(logging.WARNING)
 
 from flask_migrate import Migrate
-from kostenerstattung.utils import save_belege, get_belege, generate_ticket_body_text, get_version, generate_qrcode, delete_belege_dir
+from kostenerstattung.utils import save_belege, get_belege, generate_ticket_body_text, get_version, delete_belege_dir
 from kostenerstattung.forms import ErstattungEinreichenFormular, ErstattungAendernFormular, VerbuchungsFormular, LoginForm, ErstattungLoeschenForm, BezahlungsFormular, WeblingReloadForm, LastschriftVerbuchungsFormular
 
 app = Flask(__name__)
 app.secret_key = config["secret_key"]
 app.config["SQLALCHEMY_DATABASE_URI"] = config["db"]
 app.config['PERMANENT_SESSION_LIFETIME'] = 60*60*24*7 # 7 days
+app.config['SERVER_NAME'] = config["server_name"]
 
 from kostenerstattung.models import db, ErstattungsState, TableErstattung
-# TOOD: create db dir if not exists
+# TODO: create db dir if not exists
 logging.info(f"Using database: {config["db"]}")
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -35,23 +37,43 @@ bootstrap = Bootstrap5(app)
 error_counter = 0
 
 with app.app_context():
-    db.create_all()
-    logging.info("Database is empty. Created database schema. TODO: what?")
+    try:
+        db.create_all()
+    except Exception as e:
+        logging.error(f"Could not initialize database: {e}")
+        sys.exit(1)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        try:
+            ph = argon2.PasswordHasher()
+            ph.verify(config["admin_hash"], form.password.data)
+            session["admin"] = True
+            session.permanent = True
+            flash("Du hast dich erfolgreich angmeldet.", "success")
+            return redirect(url_for("list_erstattungen"))
+        except (ValueError, argon2.exceptions.Argon2Error) as e:
+            flash("Das eingegebene Passwort ist falsch.", "error")
+            logging.warning(f"The entered password is wrong: {e}")
+    return render_template("login.html", form=form)
 
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("admin", False):
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    form = ErstattungEinreichenFormular()
-    if form.validate_on_submit():
+
+    def create_erstattung_from_form(form):
         form_data = {field.name: field.data for field in form if field.name not in ("csrf_token", "belege", "cache_in_browser", "submit")}
         erstattung = TableErstattung(**form_data)
         erstattung.state = ErstattungsState.NEW
@@ -60,46 +82,81 @@ def index():
         save_belege(config["belege_dir"], erstattung.id, form.belege)
         flash("Das Formular wurde erfolgreich abgeschickt.", "success")
         logging.info(f"Saved new Erstattung to databases ({erstattung})")
+        return erstattung
 
+    def create_ticket_for_erstattung(erstattung, form):
         try:
-            url_erstattung = config["hostname_base_url"] + url_for('show_erstattung', erstattung_id=erstattung.id)
+            url_erstattung = url_for("show_erstattung",
+                                     erstattung_id=erstattung.id,
+                                     _external=True,
+                                     _scheme="https")
             body = generate_ticket_body_text(url_erstattung, form)
             subject = erstattung.description[:80]
-            # TODO: optimize that
+
+            # TODO: first we write Beleg to disk, then we read it again
+            # form.belege.data[0]
+            #   <FileStorage: '2026-03-11-111023_screenshot.png' ('image/png')>
+            #   x.filename
+            #   x.mimetype
+            #   but: can not access the data anymore, as we "consumed" it when writing the Beleg to disc
             belege = get_belege(config["belege_dir"], erstattung.id, b64encoded=True)
-            ticket_id, ticket_number = config["zammad_api"].create_ticket(form.name.data, form.email.data, subject, body, belege)
+
+            ticket_id, ticket_number = config["zammad_api"].create_ticket(
+                form.name.data,
+                form.email.data,
+                subject,
+                body,
+                belege
+            )
             erstattung.ticket_id = ticket_id
             erstattung.ticket_number = ticket_number
             db.session.commit()
-        except Exception as e:
+        except Exception:
             global error_counter
             error_counter += 1
-            logging.error(f"Could create ticket for Erstattung: {e}")
-        return redirect(url_for("index"))
-    return render_template("create_erstattung.html", form=form)
+            logging.exception("Could not create ticket for Erstattung")
+
+    form = ErstattungEinreichenFormular()
+    if not form.validate_on_submit():
+        return render_template("create_erstattung.html", form=form)
+
+    erstattung = create_erstattung_from_form(form)
+    create_ticket_for_erstattung(erstattung, form)
+    return redirect(url_for("index"))
 
 
 @app.route("/erstattungen")
 @login_required
 def list_erstattungen():
-    #page = request.args.get('page', 1, type=int)
-    #pagination = TableErstattung.query.filter_by(state=ErstattungsState.NEW).paginate(page=page, per_page=10)
-    #pagination = TableErstattung.query.paginate(page=page, per_page=10)
-    #erstattungen = pagination.items
-    erstattungen = TableErstattung.query.all()
-    titles = [("id", "#"), ("created_at", "Eingereicht"), ("name", "Name"), ("description", "Beschreibung"), ("betrag", "Betrag")]
-    data_neu = []
-    data_bezahlt = []
-    data_verbucht = []
-    for e in erstattungen:
-        row = {"id": e.id, "created_at": e.created_at.strftime("%d.%m.%Y (%a) %H:%M"), "name": e.name, "description": e.description[:300], "betrag": e.betrag}
-        if e.state == ErstattungsState.NEW:
-            data_neu.append(row)
-        elif e.state == ErstattungsState.PAID:
-            data_bezahlt.append(row)
-        else:
-            data_verbucht.append(row)
-    return render_template("list_erstattungen.html", titles=titles, data_neu=data_neu, data_bezahlt=data_bezahlt, data_verbucht=data_verbucht)
+
+    def erstattung_to_row(e):
+        return {
+            "id": e.id,
+            "created_at": e.created_at.strftime("%d.%m.%Y (%a) %H:%M"),
+            "name": e.name,
+            "description": e.description[:300],
+            "betrag": e.betrag
+        }
+
+    ERSTATTUNG_TABLE_COLUMNS = [
+        ("id", "#"),
+        ("created_at", "Eingereicht"),
+        ("name", "Name"),
+        ("description", "Beschreibung"),
+        ("betrag", "Betrag")
+    ]
+
+    erstattungen_neu = TableErstattung.query.filter_by(state=ErstattungsState.NEW).order_by(TableErstattung.created_at.desc()).all()
+    erstattungen_paid = TableErstattung.query.filter_by(state=ErstattungsState.PAID).order_by(TableErstattung.created_at.desc()).all()
+    erstattungen_booked = TableErstattung.query.filter_by(state=ErstattungsState.BOOKED).order_by(TableErstattung.created_at.desc()).all()
+
+    return render_template(
+        "list_erstattungen.html",
+        titles=ERSTATTUNG_TABLE_COLUMNS,
+        erstattungen_neu=[erstattung_to_row(e) for e in erstattungen_neu],
+        erstattungen_paid=[erstattung_to_row(e) for e in erstattungen_paid],
+        erstattungen_booked=[erstattung_to_row(e) for e in erstattungen_booked]
+    )
 
 
 @app.route("/erstattung/<int:erstattung_id>/belege/<path:beleg_name>")
@@ -122,25 +179,38 @@ def show_erstattung(erstattung_id):
 def edit_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if erstattung.verwendungszweck:
+    if erstattung.state == ErstattungsState.PAID:
         flash("Diese Kostenerstattung wurde schon bezahlt. Sie kann daher nicht mehr bearbeitet werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
-    ef = ErstattungAendernFormular(request.form, obj=erstattung)
-    if ef.validate_on_submit():
-        ef.populate_obj(erstattung)
+    form = ErstattungAendernFormular(obj=erstattung)
+    if form.validate_on_submit():
+        form.populate_obj(erstattung)
         db.session.commit()
         flash("Die Kostenerstattung wurde aktualisiert.", "success")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
-    return render_template("edit_erstattung.html", erstattung=erstattung, form=ef)
+    return render_template("edit_erstattung.html", erstattung=erstattung, form=form)
 
 
 @app.route("/erstattung/<int:erstattung_id>/bezahlen", methods=["GET", "POST"])
 @login_required
 def pay_erstattung(erstattung_id):
+
+    def create_payment_notification():
+        subject = "RAZ - Deine Kostenerstattung/eingereichte Rechnung wurde überwiesen"
+        body = f"Hallo {erstattung.name},\nWir haben dir eben {erstattung.betrag} Euro überwiesen." \
+               "\n\nViele Grüße\nDie Finanz AG"
+        config["zammad_api"].create_article(
+            erstattung.ticket_id,
+            subject,
+            body,
+            erstattung.email
+        )
+        flash(f"{erstattung.name} wurde über das Ticketsystem informiert, dass das Geld überwiesen wurde.", "success")
+
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if erstattung.booked_at:
+    if erstattung.state == ErstattungsState.BOOKED:
         flash("Diese Kostenerstattung wurde schon verbucht und darf nicht nochmal überwiesen werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
@@ -148,70 +218,34 @@ def pay_erstattung(erstattung_id):
     qrcode = None
 
     form = BezahlungsFormular()
-    if request.method == "GET" and erstattung.verwendungszweck:
-        qrcode = generate_qrcode(erstattung.verwendungszweck,
-                                 erstattung.iban,
-                                 erstattung.betrag,
-                                 erstattung.name_bank_account)
+    if request.method == "GET" and erstattung.state == ErstattungsState.PAID:
+        qrcode = erstattung.create_qr_code()
     if form.validate_on_submit():
         erstattung.state = ErstattungsState.PAID
         erstattung.paid_at = datetime.now()
-        erstattung.verwendungszweck = form.verwendungszweck.data
+        erstattung.verwendungszweck = form.verwendungszweck.data.strip()
         db.session.commit()
-        config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_payed"])
-        if form.benachrichtigung.data:
-            config["zammad_api"].create_article(erstattung.ticket_id,
-                                                "RAZ - Deine Kostenerstattung/eingereichte Rechnung wurde überwiesen",
-                                                f"Hallo {erstattung.name},\nWir haben dir eben {erstattung.betrag} Euro überwiesen.\nDein Geld sollte normalerweise spätestens morgen auf dem angegebenen Konto sein.\n\nViele Grüße\nDie Finanz AG",
-                                                erstattung.email)
-            flash(f"{erstattung.name} wurde über das Ticketsystem informiert, dass das Geld überwiesen wurde.", "success")
-        qrcode = generate_qrcode(form.verwendungszweck.data,
-                                 erstattung.iban,
-                                 erstattung.betrag,
-                                 erstattung.name_bank_account)
-    return render_template("pay_erstattung.html",
-                           form=form,
-                           erstattung=erstattung,
-                           belege=belege,
-                           qrcode=qrcode)
+        qrcode = erstattung.create_qr_code()
 
-#    if request.method == "GET":
-#        buchungs_periode_id = int(request.args.get("buchungsperiode", config["webling"]["default_buchungsperiode_id"]))
-#        vf = VerbuchungsFormular(obj=erstattung)
-#        #vf.buchungsperiode.choices = [(x.id, str(x)) for x in w.buchungsperioden]
-#        #vf.buchungsperiode.default = buchungs_periode_id
-#        #vf.buchungsperiode.process([])
-#        try:
-#            vf.buchungskonto.choices = [(x.id, x.name) for x in w.data[buchungs_periode_id]["buchungskonten"]]
-#            vf.kostenstelle.choices = [(x.id, x.name) for x in w.data[buchungs_periode_id]["kostenstellen"]]
-#        except Exception as e:
-#            logging.exception(e)
-#        return render_template("pay_erstattung.html", form=vf, erstattung=erstattung, belege=belege)
-#    vf = VerbuchungsFormular()
-#    if vf.validate_on_submit():
-#        # todo: ValueError
-#        epc_qr = consumer_epc_qr(
-#            beneficiary=vf.verwendungszweck.data,
-#            iban=erstattung.iban,
-#            amount=erstattung.betrag,
-#            remittance=erstattung.name_bank_account
-#        )
-#        data = epc_qr.to_qr(inline=True)
-#
-#        vf.populate_obj(erstattung)
-#        erstattung.state = ErstattungsState.PAID
-#        #erstattung.buchungskonto_id = int(vf.buchungskonto.data)
-#        db.session.commit()
-#        config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_payed"])
-#
-#        flash("Person wurde benachrichtigt")
-#        flash("Ticket hat Tag bekommen")
-#        flash("Kostenstelle/Kostenart gespeichert")
+        try:
+            config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_paid"])
+            if form.benachrichtigung.data:
+                create_payment_notification()
+        except Exception:
+            global error_counter
+            error_counter += 1
+            logging.exception("Could not update ticket after creating payment qr code")
+
+    return render_template(
+        "pay_erstattung.html",
+        form=form,
+        erstattung=erstattung,
+        belege=belege,
+        qrcode=qrcode
+    )
 
 
-def get_pre_filled_verbuchungs_formular():
-    form = LastschriftVerbuchungsFormular()
-    #form = VerbuchungsFormular()
+def get_pre_filled_verbuchungs_formular(form):
     form.buchungsperiode.choices = [(x.id, str(x)) for x in config["webling_api"].buchungsperioden]
 
     if config["webling"]["default_buchungskonto_haben_id"]:
@@ -240,7 +274,7 @@ def book_erstattung(erstattung_id):
     form = VerbuchungsFormular(request.form, obj=erstattung)
     belege = get_belege(config["belege_dir"], erstattung_id)
     if request.method == "GET":
-        form = get_pre_filled_verbuchungs_formular()
+        form = get_pre_filled_verbuchungs_formular(VerbuchungsFormular())
     elif form.validate_on_submit():
         erstattung.state = ErstattungsState.BOOKED
         erstattung.booked_at = datetime.now()
@@ -250,7 +284,7 @@ def book_erstattung(erstattung_id):
         erstattung.buchungskonto_haben_id = int(form.buchungskonto_haben.data)
         db.session.commit()
         flash("Die Erstattung wurde erfolgreich verbucht.", "success")
-        #config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_payed"])
+        #config["zammad_api"].add_tag(erstattung.ticket_id, config["zammad"]["tag_paid"])
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
     else:
         form = VerbuchungsFormular(obj=erstattung)
@@ -263,7 +297,6 @@ def book_erstattung(erstattung_id):
 @app.route("/erstattung/<int:erstattung_id>/loeschen", methods=["GET", "POST"])
 @login_required
 def delete_erstattung(erstattung_id):
-    # TODO: bug: die Tabelle macht gleich den POST... deswegen  hats oben auch das CSRF gebraucht...
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
     form = ErstattungLoeschenForm()
     if form.validate_on_submit():
@@ -278,30 +311,36 @@ def delete_erstattung(erstattung_id):
 @app.route("/lastschriften")
 @login_required
 def list_lastschriften():
-    lastschriften = config["webling_api"].lastschriften
-    titles = [("id", "#"), ("created_at", "Datum"), ("name", "Name"), ("description", "Verwendungszweck"), ("betrag", "Betrag")]
+    titles = [
+        ("id", "#"),
+        ("created_at", "Datum"),
+        ("name", "Name"),
+        ("description", "Verwendungszweck"),
+        ("betrag", "Betrag")
+    ]
     rows = []
+    lastschriften = config["webling_api"].lastschriften
     for lastschrift in lastschriften:
-        #print(json.dumps(json.loads(lastschrift["properties"]["data"]), indent=4))
-        #if "mmel-Basislastschrift mit 2 Lastschriften MSG-ID: twingle-" in lastschrift["properties"]["title"]:
-        #    breakpoint()
+        lastschrift_properties = json.loads(lastschrift["properties"]["data"])
         if lastschrift["properties"]["amount"] > 0:
-            name = json.loads(lastschrift["properties"]["data"]).get("extra_payer_information", "")
+            name = lastschrift_properties.get("extra_payer_information", "")
         else:
-            name = json.loads(lastschrift["properties"]["data"]).get("extra_payee_information", "")
-        if name == "":
-            # das ist bei Twingle Lastschriften so (Guthaben)
-            name = json.loads(lastschrift["properties"]["data"]).get("extra_payee_information", "???")
-        row = {"id": lastschrift["id"],
-               "created_at": datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d").strftime("%d.%m.%Y"),
-               "name": name,
-               "description": lastschrift["properties"]["title"],
-               "betrag": f"{lastschrift["properties"]["amount"]:.2f}".replace(".", ",")}
+            name = lastschrift_properties.get("extra_payee_information", "")
+
+        row = {
+            "id": lastschrift["id"],
+            "created_at": datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d").strftime("%d.%m.%Y"),
+            "name": name,
+            "description": lastschrift["properties"]["title"],
+            "betrag": f"{lastschrift["properties"]["amount"]:.2f}".replace(".", ",")
+        }
         rows.append(row)
     rows.sort(key=lambda x: x["id"], reverse=True)
-    return render_template("list_lastschriften.html",
-                           rows=rows,
-                           titles=titles)
+    return render_template(
+        "list_lastschriften.html",
+        titles=titles,
+        rows=rows
+    )
 
 
 @app.route("/lastschrift/<int:lastschrift_id>/verbuchen", methods=["GET", "POST"])
@@ -314,10 +353,10 @@ def book_lastschrift(lastschrift_id):
             lastschrift = lastschrift_iter
             break
     if lastschrift == {}:
-        abort(404)
+        abort(404, "Die Lastschrift wurde nicht gefunden")
 
     if request.method == "GET":
-        form = get_pre_filled_verbuchungs_formular()
+        form = get_pre_filled_verbuchungs_formular(LastschriftVerbuchungsFormular())
     else:
         form = LastschriftVerbuchungsFormular()
         if form.validate_on_submit():
@@ -325,7 +364,7 @@ def book_lastschrift(lastschrift_id):
             beleg = None
             ticket_number = ""
             if len(form.ticket_number.data) != 0:
-                ticket_number = "#" + form.ticket_number.data.replace("Ticket#", "")
+                ticket_number = "#" + form.ticket_number.data.replace("Ticket", "").replace("#", "")
                 beleg = config["zammad_api"].get_concatenated_attachments_from_ticket(ticket_number)
 
             erstattung = TableErstattung(created_at=datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d"),
@@ -347,11 +386,22 @@ def book_lastschrift(lastschrift_id):
                            form=form)
 
 
-@app.route("/api/v1/ticket/<ticket_id>")
+@app.route("/api/v1/ticket/<string:ticket_id>")
 @login_required
-def get_ticket(ticket_id):
-    ticket_id = ticket_id.replace("Ticket#", "")
-    return config["zammad_api"].search_ticket(ticket_id)
+def get_ticket(ticket_id: str):
+    try:
+        ticket_id = int(ticket_id.replace("#", "").replace("Ticket", ""))
+    except ValueError:
+        return {"error": "Ungültige Ticket Nummer"}
+    return config["zammad_api"].get_ticket(ticket_id)
+
+
+@app.route("/api/v1/config/reload", methods=["POST"])
+def api_reload_config():
+    # no auth, don't return any data
+    global config
+    config = load_config()
+    return "reload succeeded"
 
 
 @app.route("/config", methods=["GET", "POST"])
@@ -367,38 +417,21 @@ def reload_config():
                            version=get_version())
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    form = LoginForm()
-    if form.validate_on_submit():
-        try:
-            ph = argon2.PasswordHasher()
-            ph.verify(config["admin_hash"], form.password.data)
-            session["admin"] = True
-            session.permanent = True
-            flash("Du hast dich erfolgreich angmeldet.", "success")
-            return redirect(url_for("list_erstattungen"))
-        except (ValueError, argon2.exceptions.Argon2Error) as e:
-            flash("Das eingegebene Passwort ist falsch.", "error")
-            logging.error(f"The entered password is wrong: {e}")
-    return render_template("login.html", form=form)
-
-
 @app.errorhandler(404)
 def handle_bad_request(e):
-    return render_template("400.html"), 404
+    return render_template("400.html", exception=e), 404
 
 
 @app.errorhandler(500)
 def handle_server_error(e):
     global error_counter
-    logging.error(f"Got an exception: {e}")
-    logging.exception(e.original_exception)
+    logging.error(f"{request.method} {request.url}")
+    logging.error(f"{request.form.to_dict()}")
     error_counter += 1
     return render_template("500.html", exception=e.original_exception), 500
 
 
-@app.route("/status")
+@app.route("/status", methods=["GET", "POST"])
 def status() -> dict:
     if error_counter == 0:
         return {"status": "ok"}

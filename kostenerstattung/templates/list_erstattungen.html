@@ -11,7 +11,7 @@
 {{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
 
 <h3>Neue Erstattungen</h3>
-{{ render_table(data_neu, titles, show_actions=True,
+{{ render_table(erstattungen_neu, titles, show_actions=True,
     view_url=('show_erstattung', [('erstattung_id', ':id')]),
     edit_url=('edit_erstattung', [('erstattung_id', ':id')]),
     custom_actions=[
@@ -29,7 +29,7 @@
 }}
 
 <h3>Bezahlte Erstattungen</h3>
-{{ render_table(data_bezahlt, titles, show_actions=True,
+{{ render_table(erstattungen_paid, titles, show_actions=True,
     view_url=('show_erstattung', [('erstattung_id', ':id')]),
     custom_actions=[
     (
@@ -46,7 +46,7 @@
 }}
 
 <h3>Hier im System verbucht</h3>
-{{ render_table(data_verbucht, titles, show_actions=True,
+{{ render_table(erstattungen_booked, titles, show_actions=True,
     view_url=('show_erstattung', [('erstattung_id', ':id')]),
     custom_actions=[
     (

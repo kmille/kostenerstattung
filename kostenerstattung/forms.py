@@ -14,19 +14,20 @@ class BetragField(FloatField):
                 self.data = float(valuelist[0].replace(',', '.'))
             except ValueError:
                 self.data = None
-                raise ValueError(self.gettext('Not a valid float value'))
+                raise ValueError(self.gettext('Kein gültiger Betrag'))
 
 
 class ErstattungsFormular(FlaskForm):
-    name = StringField("Dein Name", validators=[DataRequired()])
-    email = EmailField("Deine E-Mail-Adresse (für Rückfragen)")
+    # von ErstattungsFormular wird nur geerbt
+    name = StringField("Dein (Spitz)Name", validators=[DataRequired()])
+    email = EmailField("Deine E-Mail-Adresse (für Rückfragen)", validators=[DataRequired()])
     name_bank_account = StringField("Vor- und Nachname Kontoinhaber*in (muss zur IBAN passen)",
                                     validators=[DataRequired()])
     iban = StringField("IBAN", validators=[DataRequired()])
     description = TextAreaField("Wofür möchtest du dir Kosten erstatten lassen?",
                                 validators=[DataRequired()],
                                 render_kw={"rows": 5})
-    betrag = BetragField("Betrag (Summe in Euro)")
+    betrag = BetragField("Betrag (Summe in Euro)", validators=[DataRequired()])
 
     def validate_iban(form, field):
         try:
@@ -85,3 +86,6 @@ class ErstattungLoeschenForm(FlaskForm):
 
 class WeblingReloadForm(FlaskForm):
     submit = SubmitField("Webling Daten abrufen")
+
+    class Meta:
+        csrf = False
