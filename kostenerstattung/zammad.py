@@ -135,7 +135,7 @@ class Zammad:
 
     def _get_ticket_attachments(self, ticket_number: int):
         try:
-            ticket_id = self.search_ticket(ticket_number)["id"]
+            ticket_id = self.get_ticket(ticket_number)["id"]
             article = self.client.ticket.articles(ticket_id)[0]
 
             for attachment in article["attachments"]:

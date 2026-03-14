@@ -6,6 +6,7 @@ from datetime import datetime
 from flask_bootstrap import Bootstrap5
 import waitress
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_from_directory, abort
+from markupsafe import Markup
 import argon2
 
 from kostenerstattung.config import load_config
@@ -377,10 +378,11 @@ def book_lastschrift(lastschrift_id):
                                          buchungsperiode_id=int(form.buchungsperiode.data))
             booking_id = config["webling_api"].create_buchung(erstattung, lastschrift["id"], beleg)
             webling_booking_url = f"{config['webling']['base_url']}/admin#/accounting/{config['webling']['default_buchungsperiode_id']}/entrygroup/:entrygroup/editor/{booking_id}"
-            flash(f'Die Lastschrift wurde erfolgreich in Twingle verbucht (<a href={webling_booking_url}">link</a>).', "success")
+            html_message = Markup(f'Die Lastschrift wurde erfolgreich in Twingle verbucht (<a href="{webling_booking_url}">link</a>).')
+            flash(html_message, "success")
             # TODO: close ticket?
             #config["webling_api"].lastschriften.remove(lastschrift)
-            #return redirect(url_for("list_lastschriften"))
+            return redirect(url_for("list_lastschriften"))
     return render_template("book_lastschrift.html",
                            lastschrift=lastschrift,
                            form=form)

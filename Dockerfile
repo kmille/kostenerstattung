@@ -1,5 +1,6 @@
 FROM python:3.14-alpine3.23 AS builder
-RUN apk add git gcc uv
+RUN apk add git gcc && \
+    pip install uv
 COPY . /app
 WORKDIR /app
 RUN uv build --wheel
