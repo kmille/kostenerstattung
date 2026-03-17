@@ -380,9 +380,24 @@ def book_lastschrift(lastschrift_id):
             webling_booking_url = f"{config['webling']['base_url']}/admin#/accounting/{config['webling']['default_buchungsperiode_id']}/entrygroup/:entrygroup/editor/{booking_id}"
             html_message = Markup(f'Die Lastschrift wurde erfolgreich in Twingle verbucht (<a href="{webling_booking_url}">link</a>).')
             flash(html_message, "success")
-            # TODO: close ticket?
-            #config["webling_api"].lastschriften.remove(lastschrift)
-            return redirect(url_for("list_lastschriften"))
+
+            if len(form.ticket_number.data) != 0:
+                ticket_number = "#" + form.ticket_number.data.replace("Ticket", "").replace("#", "")
+                ticket_id = config["zammad_api"].get_ticket(ticket_number)["id"]
+                config["zammad_api"].remove_tag(ticket_id, config["zammad"]["tag_paid"])
+                subject = "Erfolgreich verbucht"
+                body = f"Die Erstattung wurde in Webling verbucht: {webling_booking_url}"
+                config["zammad_api"].create_article(
+                    ticket_id,
+                    subject,
+                    body
+                )
+
+                if form.close_ticket.data:
+                    config["zammad_api"].update_state(ticket_id, config["zammad"]["state_closed"])
+                    flash(f"Das Ticket (#{ticket_number}) wurde geschlossen.", "success")
+                    config["webling_api"].lastschriften.remove(lastschrift)
+                return redirect(url_for("list_lastschriften"))
     return render_template("book_lastschrift.html",
                            lastschrift=lastschrift,
                            form=form)
