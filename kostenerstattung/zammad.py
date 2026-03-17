@@ -114,7 +114,7 @@ class Zammad:
             raise Exception("Could not remove tag to ticket in Zammad") from e
 
     def update_state(self, ticket_id: int, state: str):
-        logging.debug(f"Updating ticket state to {state} to ticket {ticket_id}")
+        logging.debug(f"Updating ticket state to '{state}' to ticket {ticket_id}")
         params = {
             "state": state,
         }
@@ -145,12 +145,12 @@ class Zammad:
                 data = self.client.ticket_article_attachment.download(ticket_id=ticket_id,
                                                                       article_id=article["id"],
                                                                       id=attachment_id)
-                yield Path(filename), data
+                yield filename, data
         except Exception as e:
             raise Exception(f"Could not get attachments from ticket {ticket_number}") from e
 
     def get_concatenated_attachments_from_ticket(self, ticket_number: int):
-        logging.info(f"Concatening attachments of ticket #{ticket_number}")
+        logging.info(f"Concatening attachments of ticket {ticket_number}")
         attachments = list(self._get_ticket_attachments(ticket_number))
 
         # message body is also an attachment (at least sometimes)
@@ -163,7 +163,8 @@ class Zammad:
 
         with TemporaryDirectory() as tmp:
             # 1) Write Zammad attachment to tmp dir (small file ending)
-            for filename, data in attachments:
+            for filename_str, data in attachments:
+                filename = Path(filename_str)
                 out_file = tmp / Path(filename.stem + filename.suffix.lower())
                 logging.info(f"Writing ticket attachment to {out_file}")
                 out_file.write_bytes(data)
