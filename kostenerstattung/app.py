@@ -76,6 +76,7 @@ def index():
 
     def create_erstattung_from_form(form):
         form_data = {field.name: field.data for field in form if field.name not in ("csrf_token", "belege", "cache_in_browser", "submit")}
+        form_data["iban"] = form_data["iban"].replace(" ", "")
         erstattung = TableErstattung(**form_data)
         erstattung.state = ErstattungsState.NEW
         db.session.add(erstattung)
