@@ -16,7 +16,7 @@ dependencies = [
     "pyyaml (>=6.0.3,<7.0.0)",
     "zammad-py (>=3.2.0,<4.0.0)",
     "schwifty (>=2026.1.0,<2027.0.0)",
-    "py-epc-qr @ git+https://github.com/kmille/py-epc-qr.git@0.1.6",
+    "py-epc-qr @ git+https://github.com/kmille/py-epc-qr.git@vv0.1.7",
     "argon2-cffi (>=25.1.0,<26.0.0)",
     "python-magic (>=0.4.27,<0.5.0)",
     "waitress (>=3.0.2,<4.0.0)",
