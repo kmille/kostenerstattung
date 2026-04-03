@@ -61,7 +61,7 @@ class Webling:
             self.data[buchungsperiode.id] = {}
             self.data[buchungsperiode.id]["buchungskonten"] = buchungskonten
             self.data[buchungsperiode.id]["kostenstellen"] = kostenstellen
-        self.lastschriften = self._get_unverbuchte_lastschriften()
+        self.lastschriften = self.get_unverbuchte_lastschriften()
 
     def _get_buchungsperioden(self):
         logging.info("Loading Buchungsperioden from Webling API")
@@ -105,7 +105,7 @@ class Webling:
                 logging.error(f"Webling API response: {e.response.text}")
             raise Exception("Could not load Kostenstellen from Webling API") from e
 
-    def _get_unverbuchte_lastschriften(self):
+    def get_unverbuchte_lastschriften(self):
         logging.info("Loading unverbuchte Lastschriften (current year) from Webling API")
         try:
             # resp = session.get(BASE_URL + "/payment", params="filter=amount=500")
@@ -139,7 +139,7 @@ class Webling:
         logging.debug("Creating Buchung in Webling")
         data = {
             "properties": {
-                "date": erstattung.created_at.date().isoformat(),
+                "date": erstattung.paid_at.date().isoformat(),
                 "title": erstattung.verwendungszweck,
             },
             "children": {
@@ -147,7 +147,7 @@ class Webling:
                     {
                         "properties": {
                             "amount": abs(erstattung.betrag),
-                            "receipt": erstattung.ticket_number,
+                            "receipt": f"#{erstattung.ticket_number}",
                             "isEBill": False,
                         },
                         "links": {

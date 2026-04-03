@@ -183,7 +183,7 @@ def show_erstattung(erstattung_id):
 def edit_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if erstattung.state == ErstattungsState.PAID:
+    if erstattung.state in (ErstattungsState.PAID, ErstattungsState.BOOKED, ErstattungsState.DONE):
         flash("Diese Kostenerstattung wurde schon bezahlt. Sie kann daher nicht mehr bearbeitet werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
@@ -214,7 +214,7 @@ def pay_erstattung(erstattung_id):
 
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if erstattung.state == ErstattungsState.BOOKED:
+    if erstattung.state in (ErstattungsState.PAID, ErstattungsState.BOOKED, ErstattungsState.DONE):
         flash("Diese Kostenerstattung wurde schon verbucht und darf nicht nochmal überwiesen werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
@@ -271,8 +271,12 @@ def get_pre_filled_verbuchungs_formular(form):
 def book_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if not erstattung.verwendungszweck:
+    if erstattung.state == ErstattungsState.PAID:
         flash("Die Erstattung wurde noch nicht bezahlt und kann daher noch nicht verbucht werden.", "error")
+        return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
+
+    if erstattung.state in (ErstattungsState.BOOKED, ErstattungsState.DONE):
+        flash("Die Erstattung wurde bereits verbucht.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
     form = VerbuchungsFormular(request.form, obj=erstattung)
@@ -368,10 +372,10 @@ def book_lastschrift(lastschrift_id):
             beleg = None
             ticket_number = ""
             if len(form.ticket_number.data) != 0:
-                ticket_number = "#" + form.ticket_number.data.replace("Ticket", "").replace("#", "")
+                ticket_number = form.ticket_number.data.replace("Ticket", "").replace("#", "")
                 beleg = config["zammad_api"].get_concatenated_attachments_from_ticket(ticket_number)
 
-            erstattung = TableErstattung(created_at=datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d"),
+            erstattung = TableErstattung(paid_at=datetime.strptime(lastschrift["properties"]["date"], "%Y-%m-%d"),
                                          verwendungszweck=lastschrift["properties"]["title"],
                                          betrag=lastschrift["properties"]["amount"],
                                          ticket_number=ticket_number,

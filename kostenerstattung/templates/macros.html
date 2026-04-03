@@ -1,6 +1,6 @@
 {% macro show_erstattung(config, erstattung, belege = []) %}
     Eingereicht am {{ erstattung.created_at.strftime("%d.%m.%Y (%a) %H:%M") }} </br>
-    Status: {{ erstattung.state.value }} </br>
+    Status: <strong>{{ erstattung.state.value }}</strong></br>
     Eingereicht von {{ erstattung.name }} ({{ erstattung.email }})</br>
     Bank: {{ erstattung.name_bank_account }} ({{ erstattung.iban }})</br>
     Betrag:: {{ erstattung.betrag | string | replace('.', ',') }} Euro</br>
@@ -21,11 +21,6 @@
     {% if erstattung.booked_at %}
         <hr>
         Verbucht am {{ erstattung.booked_at.strftime("%d.%m.%Y (%a) %H:%M") }} </br>
-        {% if erstattung.buchungs_id %}
-            Webling Buchungs ID: <a href="{{ config["webling"]["base_url"] }}/admin#/accounting/{{ erstattung.buchungsperiode_id }}/entrygroup//:entrygroup/editor/{{ erstattung.entrygroup_id}}">{{ erstattung.buchungs_id }}</a>
-            </br>
-        {% endif %}
-
         {% for kostenstelle in  config["webling_api"].data[erstattung.buchungsperiode_id].kostenstellen %} 
             {% if kostenstelle.id == erstattung.kostenstelle_id %}
                 Kostenstelle: {{ kostenstelle.name }} </br>
@@ -44,9 +39,13 @@
             {% endif %}
         {% endfor %}
 
+        {% if erstattung.buchungs_id %}
+            Webling Buchungs ID: <a href="{{ config["webling"]["base_url"] }}/admin#/accounting/{{ erstattung.buchungsperiode_id }}/entrygroup//:entrygroup/editor/{{ erstattung.entrygroup_id}}">{{ erstattung.buchungs_id }}</a>
+            </br>
+        {% endif %}
+
     {% endif %}
-    
-<hr>
+
 {% endmacro %}
 
 {% macro menu_erstattungen(erstattung) %}
