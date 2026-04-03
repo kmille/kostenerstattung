@@ -151,13 +151,15 @@ def list_erstattungen():
     erstattungen_neu = TableErstattung.query.filter_by(state=ErstattungsState.NEW).order_by(TableErstattung.created_at.desc()).all()
     erstattungen_paid = TableErstattung.query.filter_by(state=ErstattungsState.PAID).order_by(TableErstattung.created_at.desc()).all()
     erstattungen_booked = TableErstattung.query.filter_by(state=ErstattungsState.BOOKED).order_by(TableErstattung.created_at.desc()).all()
+    erstattungen_done = TableErstattung.query.filter_by(state=ErstattungsState.DONE).order_by(TableErstattung.created_at.desc()).all()
 
     return render_template(
         "list_erstattungen.html",
         titles=ERSTATTUNG_TABLE_COLUMNS,
         erstattungen_neu=[erstattung_to_row(e) for e in erstattungen_neu],
         erstattungen_paid=[erstattung_to_row(e) for e in erstattungen_paid],
-        erstattungen_booked=[erstattung_to_row(e) for e in erstattungen_booked]
+        erstattungen_booked=[erstattung_to_row(e) for e in erstattungen_booked],
+        erstattungen_done=[erstattung_to_row(e) for e in erstattungen_done]
     )
 
 

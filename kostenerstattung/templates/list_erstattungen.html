@@ -57,4 +57,16 @@
     ])
 }}
 
+<h3>In Weblig verbucht</h3>
+{{ render_table(erstattungen_done, titles, show_actions=True,
+    view_url=('show_erstattung', [('erstattung_id', ':id')]),
+    custom_actions=[
+    (
+        'löschen',
+        'trash-fill',
+        ('delete_erstattung', [('erstattung_id', ':id')])
+    ),
+    ])
+}}
+
 {% endblock %}
