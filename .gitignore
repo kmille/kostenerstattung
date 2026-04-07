@@ -9,3 +9,4 @@ release.sh
 *.log
 bootstrap-flask
 __pycache__
+Makefile

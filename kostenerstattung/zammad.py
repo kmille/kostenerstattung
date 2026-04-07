@@ -174,7 +174,7 @@ class Zammad:
                 if file.suffix.lower() in (".jpg", ".jpeg", ".png"):
                     logging.info(f"Converting {file.name} from img to pdf")
                     #ocrmypdf.ocr(file, (tmp / Path(file.name + ".pdf")), image_dpi=300)
-                    pdf = img2pdf.convert(file)
+                    pdf = img2pdf.convert(file, rotation=img2pdf.Rotation.ifvalid)
                     (tmp / Path(file.name + ".pdf")).write_bytes(pdf)
 
             # 3) Iterate over all PDFs and concat them
