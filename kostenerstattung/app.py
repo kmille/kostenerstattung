@@ -402,7 +402,7 @@ def book_lastschrift(lastschrift_id):
 
                 if form.close_ticket.data:
                     config["zammad_api"].update_state(ticket_id, config["zammad"]["state_closed"])
-                    flash(f"Das Ticket (#{ticket_number}) wurde geschlossen.", "success")
+                    flash(f"Das Ticket ({ticket_number}) wurde geschlossen.", "success")
                     config["webling_api"].lastschriften.remove(lastschrift)
                 return redirect(url_for("list_lastschriften"))
     return render_template("book_lastschrift.html",
