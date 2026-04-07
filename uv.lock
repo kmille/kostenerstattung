@@ -675,7 +675,7 @@ wheels = [
 
 [[package]]
 name = "kostenerstattung"
-version = "0.1.9"
+version = "0.1.10"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
