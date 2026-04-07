@@ -271,7 +271,7 @@ def get_pre_filled_verbuchungs_formular(form):
 def book_erstattung(erstattung_id):
     erstattung = db.get_or_404(TableErstattung, erstattung_id)
 
-    if erstattung.state == ErstattungsState.PAID:
+    if erstattung.state == ErstattungsState.NEW:
         flash("Die Erstattung wurde noch nicht bezahlt und kann daher noch nicht verbucht werden.", "error")
         return redirect(url_for("show_erstattung", erstattung_id=erstattung.id))
 
