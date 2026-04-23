@@ -93,7 +93,7 @@ def index():
                                      _external=True,
                                      _scheme="https")
             body = generate_ticket_body_text(url_erstattung, form)
-            subject = erstattung.description[:80]
+            subject = f"Erstattung: {erstattung.description[:80]}"
 
             # TODO: first we write Beleg to disk, then we read it again
             # form.belege.data[0]
