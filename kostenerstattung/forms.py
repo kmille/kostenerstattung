@@ -85,7 +85,7 @@ class ErstattungLoeschenForm(FlaskForm):
 
 
 class WeblingReloadForm(FlaskForm):
-    submit = SubmitField("Webling Daten abrufen")
+    submit = SubmitField("Webling-Daten aktualisieren")
 
     class Meta:
         csrf = False

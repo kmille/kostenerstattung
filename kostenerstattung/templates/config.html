@@ -2,17 +2,13 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Webling Konfiguration</h2>
+<h2>Webling Konfiguration aktualisieren</h2>
 
 {{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
 
+Hiermit wird die Konfigurationsdatei neu eingelesen und die Daten aus Webling aktualisiert.</br></br>
 {{ render_form(form) }}
 
-Kobu Version: {{ version }} </br></br>
-
-# TODO: alles komplett anzeigen </br>
-{% for buchungsperiode in config["webling_api"].buchungsperioden %}
-    - {{ buchungsperiode }} </br>
-{% endfor %}
+<!--- Kobu Version: {{ version }}  -->
 
 {% endblock %}
