@@ -11,7 +11,7 @@ from io import BytesIO
 class Zammad:
 
     def __init__(self, base_url: str, http_token: str, group: str):
-        logging.info("Initializing Zammd API")
+        logging.info("Initializing Zammad API")
         self.group = group
         self.client = ZammadAPI(url=base_url + "/api/v1", http_token=http_token)
         try:
