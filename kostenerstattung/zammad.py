@@ -46,7 +46,7 @@ class Zammad:
             "article": {
                 "subject": subject,
                 "body": body,
-                "type": "note",
+                "type": "web",
                 "internal": False,
                 "content_type": "plain/text",
                 "attachments": []
