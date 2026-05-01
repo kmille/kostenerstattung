@@ -4,12 +4,12 @@ from datetime import datetime
 import json
 
 logger = logging.getLogger(__name__)
-FORMAT = "[%(asctime)s %(levelname)5s] %(message)s"
-logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 app = Flask(__name__)
 from kostenerstattung.config import load_config
 config = load_config()
+if config["debug"]:
+    logging.getLogger().setLevel(logging.DEBUG)
 
 
 from kostenerstattung.models import db, ErstattungsState, TableErstattung
@@ -32,7 +32,7 @@ def update_ticket(erstattung, webling_booking_url):
     logger.debug("Updated Erstattung in ticket")
 
 
-def main():
+def cron():
     def update_database():
         erstattung.state = ErstattungsState.DONE
         erstattung.entrygroup_id = entrygroup_id
@@ -40,7 +40,7 @@ def main():
         db.session.commit()
         logger.debug("Updated Erstattung in db")
 
-    logger.info("Start Verbuchen in Webling. Looking for paid Erstattungen")
+    logger.info("Starting cron routine to book Webling Erstattungen paid in KoBu")
     unbooked_lastschriften = config["webling_api"].get_unverbuchte_lastschriften()
     with app.app_context():
         booked_erstattungen = TableErstattung.query.filter_by(state=ErstattungsState.BOOKED).all()
@@ -62,7 +62,7 @@ def main():
                     if date_bank != erstattung.paid_at.date():
                         logger.warning(f" Skipping Lastschrift: Date mismatch (bank={date_bank}, erstattet={erstattung.paid_at.date()})")
                         if ignore_date_abweichung:
-                            logging.info(" Fixing date in Erstattung")
+                            logger.info(" Fixing date in Erstattung")
                             erstattung.paid_at = datetime(date_bank.year, date_bank.month, date_bank.day)
                         else:
                             continue
@@ -78,4 +78,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    cron()
