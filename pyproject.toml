@@ -1,6 +1,6 @@
 [project]
 name = "kostenerstattung"
-version = "0.1.10"
+version = "0.1.11"
 description = ""
 authors = [
     {name = "kmille", email = "github@androidloves.me"}
