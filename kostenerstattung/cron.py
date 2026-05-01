@@ -9,14 +9,13 @@ app = Flask(__name__)
 from kostenerstattung.config import load_config
 config = load_config()
 if config["debug"]:
-    logging.getLogger().setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    logging.getLogger("urllib").setLevel(logging.INFO)
 
 
 from kostenerstattung.models import db, ErstattungsState, TableErstattung
 app.config["SQLALCHEMY_DATABASE_URI"] = config["db"]
 db.init_app(app)
-
-ignore_date_abweichung = False
 
 
 def update_ticket(erstattung, webling_booking_url):
@@ -60,10 +59,10 @@ def cron():
 
                     date_bank = datetime.strptime(lastschrift_properties["made_on"], "%Y-%m-%d").date()
                     if date_bank != erstattung.paid_at.date():
-                        logger.warning(f" Skipping Lastschrift: Date mismatch (bank={date_bank}, erstattet={erstattung.paid_at.date()})")
-                        if ignore_date_abweichung:
-                            logger.info(" Fixing date in Erstattung")
+                        logger.warning(f" Lastschrift: Date mismatch (bank={date_bank}, erstattet={erstattung.paid_at.date()})")
+                        if abs((erstattung.paid_at.date() - date_bank).days) < 4:
                             erstattung.paid_at = datetime(date_bank.year, date_bank.month, date_bank.day)
+                            logger.info(" Ignoring date mismatch as difference is below 4 day threshold")
                         else:
                             continue
 
