@@ -78,7 +78,7 @@ def cron():
                         lastschrift_iban == erstattung.iban.replace(" ", "") and \
                         abs(float(lastschrift_betrag)) == erstattung.betrag:
                     logger.info(f" Match {erstattung} (#{erstattung.ticket_number}) with '{lastschrift_properties['description']}'")
-                    #book_kobu_ueberweisung(erstattung, lastschrift_properties, lastschrift["id"])
+                    book_kobu_ueberweisung(erstattung, lastschrift_properties, lastschrift["id"])
 
 
 if __name__ == '__main__':
