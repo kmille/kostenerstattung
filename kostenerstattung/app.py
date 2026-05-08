@@ -331,9 +331,8 @@ def list_lastschriften():
     for lastschrift in lastschriften:
         lastschrift_properties = json.loads(lastschrift["properties"]["data"])
         if lastschrift["properties"]["amount"] > 0:
-            name = lastschrift_properties.get("extra_payer_information", "")
-        else:
-            name = lastschrift_properties.get("extra_payee_information", "")
+            continue
+        name = lastschrift_properties.get("extra_payee_information", "")
 
         row = {
             "id": lastschrift["id"],

@@ -9,6 +9,11 @@
 
 {{ render_messages(container=False, dismissible=True, dismiss_animate=True) }}
 
+<div class="alert alert-info show" role="alert">
+    In dieser Tabelle werden werden nur unverbuchte Ausgaben für 2026 aus <a href="{{ config["webling"]["base_url"] }}/admin#/accounting/4993/bankaccount/4262" >Webling</a> angezeigt. Einnahmen lassen sich einfacher direkt in Webling verbuchen.
+</div>
+
+
 {{ render_table(rows, titles, show_actions=True,
     custom_actions=[
     (
